@@ -1,124 +1,144 @@
-<<<<<<< HEAD
-# 🌌 MILKYVERSE — WEBSITE THƯƠNG MẠI ĐIỆN TỬ TRÀ SỮA TÍCH HỢP AI
+# 🌌 MILKYVERSE — Website Thương Mại Điện Tử Trà Sữa Tích Hợp AI
 
-Chào mừng đến với **MILKYVERSE** — Nền tảng thương mại điện tử chuyên biệt cho đồ uống trà sữa thế hệ mới, tích hợp **AI Barista** tư vấn công thức cá nhân hóa và **DIY Drink Studio** mô phỏng ly trà sữa tương tác thời gian thực.
+**MILKYVERSE** là nền tảng thương mại điện tử chuyên biệt cho đồ uống trà sữa, tích hợp trí tuệ nhân tạo (AI) nhằm cá nhân hóa trải nghiệm người dùng. Hệ thống hỗ trợ tư vấn đồ uống thông minh, tự thiết kế công thức trà sữa, đặt hàng trực tuyến và quản lý kho nguyên liệu.
 
----
+## ✨ 1. Chức năng chính
 
-## 🛠️ 1. CÔNG NGHỆ BẮT BUỘC ĐÃ TRIỂN KHAI
+- **AI Barista:** Tư vấn và đề xuất đồ uống theo khẩu vị, ngân sách và nhu cầu của khách hàng.
+- **DIY Drink Studio:** Cho phép khách hàng tự thiết kế ly trà sữa bằng cách lựa chọn kích cỡ, lượng đường, lượng đá và topping.
+- **Quản lý thực đơn:** Hiển thị danh mục, tìm kiếm sản phẩm và xem chi tiết đồ uống.
+- **Giỏ hàng và thanh toán:** Quản lý giỏ hàng, áp dụng mã giảm giá và đặt hàng trực tuyến.
+- **Theo dõi đơn hàng:** Xem lịch sử mua hàng và theo dõi trạng thái đơn hàng.
+- **Quản lý kho nguyên liệu:** Theo dõi số lượng tồn kho, quản lý nhập xuất và cảnh báo nguyên liệu sắp hết.
+- **Quản trị hệ thống:** Quản lý sản phẩm, đơn hàng, doanh thu và tồn kho.
+- **Xác thực và phân quyền:** Đăng ký, đăng nhập bằng JWT và phân quyền Customer, Staff, Admin.
+- **Kiểm thử tự động:** Sử dụng xUnit để kiểm thử các chức năng của hệ thống.
 
-### 🎨 Frontend
-- **Framework**: [Next.js 16 (App Router)](https://nextjs.org/) + **React 19** + **TypeScript**.
-- **Styling**: **Tailwind CSS v4** với bảng màu thương hiệu Trà Sữa (Nền kem `#FAF7F2`, Nâu trà `#6F4E37`, Hồng pastel `#F7D6D0`, Xanh matcha `#4E7D55`).
-- **Icons**: [Lucide React](https://lucide.dev/).
-- **Quản lý trạng thái & Giỏ hàng**: React Context (`CartContext`, `AuthContext`) lưu trữ snapshot cấu hình ly trà sữa và token bảo mật.
-- **Trải nghiệm**: Hiệu ứng pháo hoa ăn mừng khi đặt hàng thành công (`canvas-confetti`).
+## 🛠️ 2. Công nghệ sử dụng
 
-### ⚙️ Backend
-- **Framework**: **ASP.NET Core Web API** (ngôn ngữ **C#**).
-- **ORM & Database**: **Entity Framework Core 9 / 10** + **Pomelo.EntityFrameworkCore.MySql** (kết nối **MySQL 8.0+**).
-- **Cơ chế dự phòng thông minh (Auto-Fallback)**: Hệ thống tự động phát hiện cổng MySQL 3306; nếu MySQL chưa bật, hệ thống tự động khởi chạy SQLite cục bộ (`milkyverse_local.db`) để bạn có thể test chạy ngay lập tức mà không bị gián đoạn.
-- **Xác thực & Bảo mật**: **JWT Bearer Token** + Hashing mật khẩu **BCrypt** + Phân quyền Role-based (`Customer`, `Staff`, `Admin`).
-- **ACID Transaction**: Toàn bộ quy trình đặt hàng, áp dụng voucher, tạo snapshot giá và tự động trừ kho nguyên liệu theo Recipe đều chạy trong một Transaction duy nhất.
-- **API Documentation**: **Swagger / OpenAPI** tại `/swagger`.
+### Frontend
+- Next.js 16 (App Router)
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- Lucide React
+- React Context API
 
-### 🤖 AI Barista
-- **Tích hợp Cloud AI**: Kết nối trực tiếp **Google Gemini API** (`gemini-1.5-flash`) từ backend ASP.NET Core, không lộ API key ra frontend.
-- **Quy tắc Sommelier dự phòng an toàn**: Khi chưa cấu hình API Key hoặc khi mất mạng, hệ thống tự động kích hoạt **Local Barista Engine** phân tích khẩu vị người dùng (ít ngọt, béo nhẹ, healthy, mất ngủ, giải nhiệt) và gợi ý chính xác các sản phẩm thật đang có trong database, có gắn nhãn minh bạch theo đúng yêu cầu đề bài.
+### Backend
+- ASP.NET Core Web API
+- C#
+- Entity Framework Core
+- MySQL 8.0+
+- SQLite dự phòng khi được cấu hình
+- JWT Bearer Authentication
+- BCrypt
+- Swagger / OpenAPI
 
----
+### Trí tuệ nhân tạo và kiểm thử
+- Google Gemini API
+- Local Barista Engine dự phòng
+- xUnit
 
-## 📁 2. CẤU TRÚC THƯ MỤC DỰ ÁN
+## 📁 3. Cấu trúc thư mục dự án
 
-```
-d:\MILKYVERSE\
-├── backend\
-│   ├── MilkyVerse.Api\                # Ứng dụng ASP.NET Core Web API
-│   │   ├── Controllers\              # Auth, Products, Categories, Drinks, Orders, AI, Admin
-│   │   ├── Services\                 # AuthService, ProductService, DIYService, OrderService, AIBaristaService, InventoryService, AdminService
-│   │   ├── Models\                   # User, Category, Product, Ingredient, Topping, Recipe, Order, Detail, Promotion, ChatSession...
-│   │   ├── DTOs\                     # Các lớp Request / Response Data Transfer Objects
-│   │   ├── Data\                     # MilkyVerseDbContext, DbInitializer (Seed Data), schema.sql
-│   │   ├── Program.cs                # Pipeline cấu hình CORS, JWT, Swagger, DI
-│   │   └── appsettings.json          # Cấu hình Connection String MySQL, JWT Key, Gemini API Key
-│   └── MilkyVerse.Tests\             # Bộ kiểm thử Unit Test xUnit tự động
-└── frontend\
-    ├── src\
-    │   ├── app\                      # Next.js App Router
-    │   │   ├── page.tsx              # Trang chủ (Hero, Banner, Best-sellers, Danh mục)
-    │   │   ├── menu\page.tsx         # Danh mục thực đơn & tìm kiếm & phân loại
-    │   │   ├── menu\[slug]\page.tsx  # Chi tiết sản phẩm (Chọn Size, Đường, Đá, Multi-topping)
-    │   │   ├── diy\page.tsx          # DIY Drink Studio (Trình mô phỏng ly trà sữa tương tác)
-    │   │   ├── ai-barista\page.tsx   # Trợ lý ảo AI Barista tư vấn công thức
-    │   │   ├── cart\page.tsx         # Giỏ hàng & áp dụng voucher ưu đãi
-    │   │   ├── checkout\page.tsx     # Thanh toán & chọn phương thức (COD / VNPAY)
-    │   │   ├── orders\page.tsx       # Lịch sử đơn hàng của khách hàng
-    │   │   ├── orders\[id]\page.tsx  # Theo dõi tiến trình 5 bước đơn hàng
-    │   │   ├── auth\login\page.tsx   # Đăng nhập (Kèm nút Demo 1-click)
-    │   │   ├── auth\register\page.tsx# Đăng ký tài khoản
-    │   │   └── admin\                # Khu vực Quản trị viên
-    │   │       ├── page.tsx          # Dashboard doanh thu, KPI, cảnh báo tồn kho
-    │   │       ├── products\page.tsx # CRUD sản phẩm & trạng thái bán
-    │   │       ├── inventory\page.tsx# Quản lý tồn kho nguyên liệu & nhập/xuất
-    │   │       └── orders\page.tsx   # Quản lý đơn hàng & chuyển trạng thái
-    │   ├── components\layout\        # Navbar, Footer
-    │   ├── context\                  # AuthContext, CartContext
-    │   ├── lib\                      # api.ts (HTTP Client)
-    │   └── types\                    # index.ts (TypeScript Interfaces)
+```text
+MILKYVERSE/
+├── backend/
+│   ├── MilkyVerse.Api/
+│   │   ├── Controllers/    # Xử lý các yêu cầu API
+│   │   ├── Services/       # Xử lý nghiệp vụ
+│   │   ├── Models/         # Các lớp mô hình dữ liệu
+│   │   ├── DTOs/           # Đối tượng truyền dữ liệu
+│   │   ├── Data/           # DbContext và khởi tạo dữ liệu
+│   │   ├── Program.cs      # Cấu hình ứng dụng
+│   │   └── appsettings.json
+│   └── MilkyVerse.Tests/   # Bộ kiểm thử tự động
+└── frontend/
+    ├── src/
+    │   ├── app/            # Các trang giao diện
+    │   ├── components/     # Các thành phần giao diện
+    │   ├── context/        # Quản lý trạng thái
+    │   ├── lib/            # Các tiện ích và kết nối API
+    │   └── types/          # Khai báo kiểu dữ liệu
     └── package.json
 ```
 
----
+## 🚀 4. Hướng dẫn cài đặt và chạy dự án
 
-## 🚀 3. HƯỚNG DẪN KHỞI CHẠY DỰ ÁN
+### Yêu cầu hệ thống
 
-### Bước 1: Khởi động Backend (ASP.NET Core Web API)
-Mở một cửa sổ Terminal tại thư mục `backend/MilkyVerse.Api`:
+- Node.js và npm
+- .NET SDK tương thích với dự án Backend
+- MySQL 8.0+ nếu sử dụng MySQL
+
+### Bước 1: Khởi chạy Backend
+
+Mở Terminal tại thư mục dự án và chạy:
+
 ```bash
-cd d:\MILKYVERSE\backend\MilkyVerse.Api
+cd backend/MilkyVerse.Api
+dotnet restore
 dotnet run --urls "http://localhost:5000"
 ```
-- API sẽ chạy tại: `http://localhost:5000`
-- Giao diện kiểm thử Swagger API: `http://localhost:5000/swagger`
-- Cơ sở dữ liệu sẽ tự động tạo bảng và nạp sẵn dữ liệu mẫu (Sản phẩm, Topping, Nguyên liệu, Tài khoản).
 
-### Bước 2: Khởi động Frontend (Next.js)
-Mở một cửa sổ Terminal thứ hai tại thư mục `frontend`:
+Sau khi khởi chạy thành công:
+
+- API: http://localhost:5000
+- Swagger: http://localhost:5000/swagger
+
+### Bước 2: Khởi chạy Frontend
+
+Mở Terminal thứ hai và chạy:
+
 ```bash
-cd d:\MILKYVERSE\frontend
+cd frontend
+npm install
 npm run dev
 ```
-- Mở trình duyệt truy cập: `http://localhost:3000`
 
----
+Mở trình duyệt tại địa chỉ: http://localhost:3000
 
-## 🔑 4. TÀI KHOẢN DÙNG THỬ CÓ SẴN (PRE-SEEDED)
+### Bước 3: Chạy kiểm thử tự động
 
-Tại trang Đăng nhập (`/auth/login`), bạn có thể bấm ngay các nút **Đăng Nhập Nhanh**:
-1. **Quản trị viên (Admin)**:
-   - Email: `admin@milkyverse.com`
-   - Mật khẩu: `Admin@123`
-   - Quyền: Toàn quyền truy cập Dashboard `/admin`, quản lý kho, duyệt đơn hàng và chỉnh sửa sản phẩm.
-2. **Khách hàng thân thiết**:
-   - Email: `khachhang@milkyverse.com`
-   - Mật khẩu: `Customer@123`
-   - Quyền: Tự thiết kế đồ uống, đặt hàng, lưu giỏ và tra cứu lịch sử đơn.
-
----
-
-## 🏷️ 5. MÃ GIẢM GIÁ DÙNG THỬ
-- **`MILKYNEW`**: Giảm 20% cho đơn hàng đầu tiên từ 50.000đ.
-- **`FREESHIP`**: Miễn phí vận chuyển 15.000đ cho đơn hàng từ 99.000đ.
-- **`AIBARISTA`**: Giảm trực tiếp 30.000đ cho đơn từ 120.000đ.
-
----
-
-## 🧪 6. CHẠY BỘ KIỂM THỬ TỰ ĐỘNG (XUNIT)
-Mở terminal và gõ:
 ```bash
-dotnet test d:\MILKYVERSE\backend\MilkyVerse.Tests
+dotnet test backend/MilkyVerse.Tests
 ```
-Kết quả kiểm thử: **4/4 Tests Passed** (Bao gồm đăng ký, đăng nhập bảo mật, tính giá ly DIY, kiểm tra voucher và cập nhật tồn kho).
-=======
-# MILKYVERSE
->>>>>>> e2f01ca689c0e906ac4e0530801df0b62d1f34f0
+
+Kiểm tra kết quả Terminal để biết số lượng kiểm thử thành công và thất bại.
+
+## 🔐 5. Tài khoản dùng thử
+
+Nếu cơ sở dữ liệu đã được khởi tạo dữ liệu mẫu, bạn có thể sử dụng các tài khoản sau:
+
+| Vai trò | Email | Mật khẩu |
+|---|---|---|
+| Quản trị viên | `admin@milkyverse.com` | `Admin@123` |
+| Khách hàng | `khachhang@milkyverse.com` | `Customer@123` |
+
+**Lưu ý:** Đây là tài khoản phục vụ phát triển và kiểm thử. Không sử dụng thông tin đăng nhập mặc định trong môi trường thực tế.
+
+## 🏷️ 6. Mã giảm giá dùng thử
+
+| Mã giảm giá | Ưu đãi |
+|---|---|
+| `MILKYNEW` | Giảm 20% cho đơn hàng đầu tiên từ 50.000đ |
+| `FREESHIP` | Giảm 15.000đ phí vận chuyển cho đơn từ 99.000đ |
+| `AIBARISTA` | Giảm 30.000đ cho đơn từ 120.000đ |
+
+Các mã giảm giá cần được cấu hình và khởi tạo trong Backend để có thể sử dụng.
+
+## 🔒 7. Bảo mật và cấu hình
+
+- Cấu hình chuỗi kết nối cơ sở dữ liệu phù hợp với môi trường chạy.
+- Lưu API Key và JWT Secret trong biến môi trường hoặc cấu hình cục bộ an toàn.
+- Không tải thông tin bí mật lên GitHub.
+- Chỉ sử dụng cơ chế SQLite dự phòng khi Backend đã được cấu hình để phát hiện lỗi kết nối MySQL và khởi tạo SQLite.
+- Đảm bảo dữ liệu mẫu đã được khởi tạo trước khi sử dụng tài khoản và mã giảm giá dùng thử.
+
+## 📌 8. Mục tiêu dự án
+
+MILKYVERSE hướng đến việc xây dựng một nền tảng kinh doanh trà sữa hiện đại, kết hợp thương mại điện tử và trí tuệ nhân tạo. Dự án giúp khách hàng dễ dàng tìm kiếm, cá nhân hóa và đặt mua đồ uống, đồng thời hỗ trợ nhân viên và quản trị viên quản lý hoạt động kinh doanh hiệu quả.
+
+## 📄 9. Giấy phép
+
+Nếu muốn công khai và phân phối dự án, hãy bổ sung tệp `LICENSE` với giấy phép phù hợp.
