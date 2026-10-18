@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🌌 MILKYVERSE — WEBSITE THƯƠNG MẠI ĐIỆN TỬ TRÀ SỮA TÍCH HỢP AI
 
 Chào mừng đến với **MILKYVERSE** — Nền tảng thương mại điện tử chuyên biệt cho đồ uống trà sữa thế hệ mới, tích hợp **AI Barista** tư vấn công thức cá nhân hóa và **DIY Drink Studio** mô phỏng ly trà sữa tương tác thời gian thực.
@@ -118,3 +119,6 @@ Mở terminal và gõ:
 dotnet test d:\MILKYVERSE\backend\MilkyVerse.Tests
 ```
 Kết quả kiểm thử: **4/4 Tests Passed** (Bao gồm đăng ký, đăng nhập bảo mật, tính giá ly DIY, kiểm tra voucher và cập nhật tồn kho).
+=======
+# MILKYVERSE
+>>>>>>> e2f01ca689c0e906ac4e0530801df0b62d1f34f0
