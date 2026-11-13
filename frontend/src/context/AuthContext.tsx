@@ -8,14 +8,16 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, pass: string) => Promise<{ success: boolean; message?: string }>;
+  login: (email: string, pass: string) => Promise<{ success: boolean; role?: UserRole; message?: string }>;
   register: (payload: { fullName: string; email: string; password: string; verificationCode?: string; phoneNumber?: string; address?: string }) => Promise<{ success: boolean; message?: string }>;
+  updateProfile: (payload: { fullName: string; phoneNumber: string; address: string; avatarUrl?: string; password?: string }) => Promise<{ success: boolean; message?: string }>;
   logout: () => void;
   isAdmin: boolean;
   isManager: boolean;
   isStaff: boolean;
   isWarehouse: boolean;
   isDelivery: boolean;
+  canOrder: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -24,12 +26,14 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   login: async () => ({ success: false }),
   register: async () => ({ success: false }),
+  updateProfile: async () => ({ success: false }),
   logout: () => {},
   isAdmin: false,
   isManager: false,
   isStaff: false,
   isWarehouse: false,
   isDelivery: false,
+  canOrder: true,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -70,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [logout]);
 
-  const login = async (email: string, pass: string) => {
+  const login = async (email: string, pass: string): Promise<{ success: boolean; role?: UserRole; message?: string }> => {
     try {
       const res = await api.login({ email, password: pass });
       setToken(res.token);
@@ -81,12 +85,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: res.role as UserRole,
         phoneNumber: res.phoneNumber,
         address: res.address,
+        avatarUrl: res.avatarUrl,
         createdAt: new Date().toISOString(),
       };
       setUser(userObj);
       localStorage.setItem("milky_token", res.token);
       localStorage.setItem("milky_user", JSON.stringify(userObj));
-      return { success: true };
+      return { success: true, role: res.role as UserRole };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Đăng nhập thất bại.";
       return { success: false, message: msg };
@@ -104,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: res.role as UserRole,
         phoneNumber: res.phoneNumber,
         address: res.address,
+        avatarUrl: res.avatarUrl,
         createdAt: new Date().toISOString(),
       };
       setUser(userObj);
@@ -116,11 +122,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateProfile = async (payload: { fullName: string; phoneNumber: string; address: string; avatarUrl?: string; password?: string }) => {
+    try {
+      const updatedUser = await api.updateProfile(payload);
+      setUser(updatedUser);
+      localStorage.setItem("milky_user", JSON.stringify(updatedUser));
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Cập nhật hồ sơ thất bại.";
+      return { success: false, message: msg };
+    }
+  };
+
   const isAdmin = user?.role === "Admin";
   const isManager = user?.role === "Manager" || user?.role === "Admin";
   const isStaff = user?.role === "Staff" || user?.role === "Manager" || user?.role === "Admin";
   const isWarehouse = user?.role === "WarehouseStaff" || user?.role === "Manager" || user?.role === "Admin";
   const isDelivery = user?.role === "DeliveryStaff" || user?.role === "Manager" || user?.role === "Admin";
+  // Chỉ có Khách hàng và Nhân viên phục vụ mới được phép đặt món (Shipper, Thủ kho, Quản lý/Admin không được đặt món)
+  const canOrder = !user || user.role === "Customer" || user.role === "Staff";
 
   return (
     <AuthContext.Provider
@@ -130,12 +150,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         register,
+        updateProfile,
         logout,
         isAdmin,
         isManager,
         isStaff,
         isWarehouse,
         isDelivery,
+        canOrder,
       }}
     >
       {children}

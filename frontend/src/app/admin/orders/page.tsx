@@ -14,6 +14,10 @@ import {
   MapPin,
   User,
   Check,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  Clock,
 } from "lucide-react";
 
 export default function AdminOrdersPage() {
@@ -21,6 +25,8 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 8;
 
   // Selected Order for Detail & Dispatch Modal
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null);
@@ -124,7 +130,10 @@ export default function AdminOrdersPage() {
           return (
             <button
               key={st.key}
-              onClick={() => setStatusFilter(st.key)}
+              onClick={() => {
+                setStatusFilter(st.key);
+                setCurrentPage(1);
+              }}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
                 statusFilter === st.key
                   ? "bg-[#6F4E37] text-white shadow-sm"
@@ -175,130 +184,186 @@ export default function AdminOrdersPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((o) => (
-                  <tr key={o.id} className="hover:bg-[#FAF7F2]/60 transition-colors">
-                    <td className="p-4 font-black text-[#2D2522]">
-                      <button
-                        onClick={() => setSelectedOrder(o)}
-                        className="hover:underline flex items-center gap-1.5 text-[#6F4E37] font-bold"
-                      >
-                        <span>#{o.orderCode}</span>
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-[10px] text-[#786C65] font-normal block mt-0.5">
-                        {new Date(o.createdAt).toLocaleString("vi-VN")}
-                      </span>
-                    </td>
+                (() => {
+                  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
+                  const paged = filtered.slice(
+                    (currentPage - 1) * ITEMS_PER_PAGE,
+                    currentPage * ITEMS_PER_PAGE
+                  );
 
-                    <td className="p-4">
-                      <p className="font-bold text-[#2D2522]">{o.customerName}</p>
-                      <p className="text-[#6F4E37] font-semibold flex items-center gap-1 mt-0.5">
-                        <Phone className="w-3 h-3" />
-                        <span>{o.customerPhone}</span>
-                      </p>
-                    </td>
-
-                    <td className="p-4 max-w-xs truncate text-[#786C65]" title={o.shippingAddress}>
-                      {o.shippingAddress}
-                    </td>
-
-                    <td className="p-4">
-                      <p className="font-black text-[#6F4E37] text-sm">
-                        {o.totalAmount.toLocaleString("vi-VN")}đ
-                      </p>
-                      <span
-                        className={`inline-block text-[10px] font-bold px-1.5 py-0.2 rounded mt-0.5 ${
-                          o.paymentStatus === "Paid"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {o.paymentMethod} • {o.paymentStatus === "Paid" ? "Đã TT" : "Chưa TT"}
-                      </span>
-                    </td>
-
-                    <td className="p-4">
-                      <span
-                        className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-flex items-center gap-1 ${
-                          o.status === "Pending"
-                            ? "bg-amber-100 text-amber-900 border border-amber-300"
-                            : o.status === "Confirmed"
-                            ? "bg-blue-100 text-blue-900 border border-blue-300"
-                            : o.status === "Preparing"
-                            ? "bg-purple-100 text-purple-900 border border-purple-300"
-                            : o.status === "Delivering"
-                            ? "bg-cyan-100 text-cyan-900 border border-cyan-300"
-                            : o.status === "Completed"
-                            ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                            : "bg-red-100 text-red-900 border border-red-300"
-                        }`}
-                      >
-                        {o.status === "Pending" && "⏳ Chờ xác nhận"}
-                        {o.status === "Confirmed" && "📋 Đã xác nhận"}
-                        {o.status === "Preparing" && "🧋 Đang pha chế"}
-                        {o.status === "Delivering" && "🛵 Đang giao hàng"}
-                        {o.status === "Completed" && "✅ Đã giao thành công"}
-                        {o.status === "Cancelled" && "❌ Đã hủy đơn"}
-                      </span>
-                    </td>
-
-                    <td className="p-4 text-right">
-                      <div className="inline-flex items-center gap-1.5">
+                  return paged.map((o) => (
+                    <tr key={o.id} className="hover:bg-[#FAF7F2]/60 transition-colors">
+                      <td className="p-4 font-black text-[#2D2522]">
                         <button
                           onClick={() => setSelectedOrder(o)}
-                          className="px-2.5 py-1.5 rounded-xl bg-white border border-[#EFE6DC] text-[#2D2522] hover:bg-[#FAF7F2] font-bold text-xs shadow-2xs"
+                          className="hover:underline flex items-center gap-1.5 text-[#6F4E37] font-bold"
                         >
-                          Chi tiết & Điều phối
+                          <span>#{o.orderCode}</span>
+                          <Eye className="w-3.5 h-3.5" />
                         </button>
+                        <span className="text-[10px] text-[#786C65] font-normal block mt-0.5">
+                          {new Date(o.createdAt).toLocaleString("vi-VN")}
+                        </span>
+                      </td>
 
-                        {/* Quick Action buttons */}
-                        {o.status === "Pending" && (
-                          <button
-                            onClick={() => handleUpdateStatus(o.id, "Confirmed")}
-                            disabled={updatingId === o.id}
-                            className="px-2.5 py-1.5 rounded-xl bg-[#4E7D55] text-white font-bold hover:bg-[#3D6343] transition-colors"
+                      <td className="p-4">
+                        <p className="font-bold text-[#2D2522]">{o.customerName}</p>
+                        <p className="text-[#6F4E37] font-semibold flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3" />
+                          <span>{o.customerPhone}</span>
+                        </p>
+                      </td>
+
+                      <td className="p-4 max-w-xs truncate text-[#786C65]" title={o.shippingAddress}>
+                        {o.shippingAddress}
+                      </td>
+
+                      <td className="p-4">
+                        <p className="font-black text-[#6F4E37] text-sm">
+                          {o.totalAmount.toLocaleString("vi-VN")}đ
+                        </p>
+                        <span
+                          className={`inline-block text-[10px] font-bold px-1.5 py-0.2 rounded mt-0.5 ${
+                            o.paymentStatus === "Paid"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-amber-100 text-amber-800"
+                          }`}
+                        >
+                          {o.paymentMethod} • {o.paymentStatus === "Paid" ? "Đã TT" : "Chưa TT"}
+                        </span>
+                      </td>
+
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          <span
+                            className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-flex items-center gap-1 ${
+                              o.status === "Pending"
+                                ? "bg-amber-100 text-amber-900 border border-amber-300"
+                                : o.status === "Confirmed"
+                                ? "bg-blue-100 text-blue-900 border border-blue-300"
+                                : o.status === "Preparing"
+                                ? "bg-purple-100 text-purple-900 border border-purple-300"
+                                : o.status === "Delivering"
+                                ? "bg-cyan-100 text-cyan-900 border border-cyan-300"
+                                : o.status === "Completed"
+                                ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                : "bg-red-100 text-red-900 border border-red-300"
+                            }`}
                           >
-                            Duyệt đơn
-                          </button>
-                        )}
+                            {o.status === "Pending" && "⏳ Chờ duyệt (Quầy/Admin)"}
+                            {o.status === "Confirmed" && "📋 Đã duyệt -> Chờ Bếp nấu"}
+                            {o.status === "Preparing" && "🧋 Bếp đang pha chế"}
+                            {o.status === "Delivering" && "🛵 Shipper đang giao"}
+                            {o.status === "Completed" && "✅ Giao xong (Khách nhận)"}
+                            {o.status === "Cancelled" && "❌ Đã hủy đơn"}
+                          </span>
+                        </div>
+                      </td>
 
-                        {o.status === "Confirmed" && (
-                          <button
-                            onClick={() => handleUpdateStatus(o.id, "Preparing")}
-                            disabled={updatingId === o.id}
-                            className="px-2.5 py-1.5 rounded-xl bg-[#6F4E37] text-white font-bold hover:bg-[#4A3324] transition-colors"
-                          >
-                            Pha chế
-                          </button>
-                        )}
-
-                        {o.status === "Preparing" && (
+                      <td className="p-4 text-right">
+                        <div className="inline-flex items-center gap-1.5">
                           <button
                             onClick={() => setSelectedOrder(o)}
-                            className="px-2.5 py-1.5 rounded-xl bg-cyan-700 text-white font-bold hover:bg-cyan-800 transition-colors flex items-center gap-1"
+                            className="px-2.5 py-1.5 rounded-xl bg-white border border-[#EFE6DC] text-[#2D2522] hover:bg-[#FAF7F2] font-bold text-xs shadow-2xs"
                           >
-                            <Truck className="w-3.5 h-3.5" />
-                            <span>Giao shipper</span>
+                            Xem tiến trình & Chi tiết
                           </button>
-                        )}
 
-                        {o.status === "Delivering" && (
-                          <button
-                            onClick={() => handleUpdateStatus(o.id, "Completed", "Paid")}
-                            disabled={updatingId === o.id}
-                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors"
-                          >
-                            Đã giao (Đã TT)
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {/* Quick Action buttons */}
+                          {o.status === "Pending" && (
+                            <button
+                              onClick={() => handleUpdateStatus(o.id, "Confirmed")}
+                              disabled={updatingId === o.id}
+                              className="px-2.5 py-1.5 rounded-xl bg-[#4E7D55] text-white font-bold hover:bg-[#3D6343] transition-colors"
+                              title="Quầy/Admin duyệt đơn"
+                            >
+                              Duyệt đơn
+                            </button>
+                          )}
+
+                          {o.status === "Confirmed" && (
+                            <button
+                              onClick={() => handleUpdateStatus(o.id, "Preparing")}
+                              disabled={updatingId === o.id}
+                              className="px-2.5 py-1.5 rounded-xl bg-[#6F4E37] text-white font-bold hover:bg-[#4A3324] transition-colors"
+                              title="Chuyển Bếp chuẩn bị"
+                            >
+                              Bếp nấu
+                            </button>
+                          )}
+
+                          {o.status === "Preparing" && (
+                            <button
+                              onClick={() => setSelectedOrder(o)}
+                              className="px-2.5 py-1.5 rounded-xl bg-cyan-700 text-white font-bold hover:bg-cyan-800 transition-colors flex items-center gap-1"
+                              title="Bếp hoàn tất & Giao shipper"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>Giao shipper</span>
+                            </button>
+                          )}
+
+                          {o.status === "Delivering" && (
+                            <button
+                              onClick={() => handleUpdateStatus(o.id, "Completed", "Paid")}
+                              disabled={updatingId === o.id}
+                              className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors"
+                              title="Hoàn tất đơn hàng"
+                            >
+                              Khách nhận (Đã TT)
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ));
+                })()
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {(() => {
+          const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
+          if (totalPages <= 1) return null;
+          return (
+            <div className="p-4 border-t border-[#EFE6DC] flex items-center justify-between text-xs text-[#786C65]">
+              <span>
+                Trang {currentPage} / {totalPages} (Tổng {filtered.length} đơn hàng)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => setCurrentPage(num)}
+                    className={`w-7 h-7 rounded-lg font-bold ${
+                      currentPage === num
+                        ? "bg-[#6F4E37] text-white"
+                        : "border border-[#EFE6DC] hover:bg-[#FAF7F2]"
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* DETAILED ORDER FULFILLMENT & DISPATCH MODAL */}
@@ -490,39 +555,43 @@ export default function AdminOrdersPage() {
                   </div>
                 </div>
 
-                {/* Progress Buttons */}
+                {/* Progress Buttons with Actor Tags */}
                 <div className="pt-2 flex flex-wrap gap-2">
                   <button
                     onClick={() => handleUpdateStatus(selectedOrder.id, "Confirmed")}
                     disabled={updatingId === selectedOrder.id || selectedOrder.status === "Confirmed"}
                     className="px-3.5 py-2.5 rounded-xl bg-[#4E7D55] text-white font-bold hover:bg-[#3D6343] transition-colors disabled:opacity-40"
+                    title="NV Quầy hoặc Admin duyệt đơn"
                   >
-                    1. Duyệt & Xác nhận đơn
+                    1. [Quầy/Admin] Duyệt đơn
                   </button>
 
                   <button
                     onClick={() => handleUpdateStatus(selectedOrder.id, "Preparing")}
                     disabled={updatingId === selectedOrder.id || selectedOrder.status === "Preparing"}
                     className="px-3.5 py-2.5 rounded-xl bg-[#6F4E37] text-white font-bold hover:bg-[#4A3324] transition-colors disabled:opacity-40"
+                    title="Bếp nhận thông báo & bắt đầu nấu"
                   >
-                    2. Chuyển Barista pha chế
+                    2. [Bếp] Bắt đầu pha chế
                   </button>
 
                   <button
                     onClick={() => handleUpdateStatus(selectedOrder.id, "Delivering")}
                     disabled={updatingId === selectedOrder.id || selectedOrder.status === "Delivering"}
                     className="px-3.5 py-2.5 rounded-xl bg-cyan-700 text-white font-bold hover:bg-cyan-800 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                    title="Bếp nấu xong, shipper tự nhận hoặc quầy bàn giao"
                   >
                     <Truck className="w-3.5 h-3.5" />
-                    <span>3. Bàn giao Shipper vận chuyển</span>
+                    <span>3. [Shipper] Nhận đơn & Vận chuyển</span>
                   </button>
 
                   <button
                     onClick={() => handleUpdateStatus(selectedOrder.id, "Completed", "Paid")}
                     disabled={updatingId === selectedOrder.id || selectedOrder.status === "Completed"}
                     className="px-3.5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                    title="Khách hàng tự xác nhận hoặc Shipper báo đã giao"
                   >
-                    4. Xác nhận đã giao xong & Thu tiền
+                    4. [Khách/Shipper] Đã giao xong
                   </button>
 
                   <button

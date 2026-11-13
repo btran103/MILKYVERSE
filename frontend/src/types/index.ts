@@ -6,6 +6,7 @@ export interface User {
   email: string;
   phoneNumber?: string;
   address?: string;
+  avatarUrl?: string;
   role: UserRole;
   isActive?: boolean;
   createdAt: string;
@@ -19,6 +20,7 @@ export interface AuthResponse {
   role: UserRole;
   phoneNumber?: string;
   address?: string;
+  avatarUrl?: string;
 }
 
 export interface Category {
@@ -91,6 +93,19 @@ export interface Product {
   PortionDescription?: string;
 }
 
+export interface ProductReview {
+  id: number;
+  productId: number;
+  userId: number;
+  userName: string;
+  userAvatar?: string;
+  rating: number;
+  verdict: string;
+  comment: string;
+  isVerifiedPurchase: boolean;
+  createdAt: string;
+}
+
 export interface ProductDetail extends Product {
   availableToppings: Topping[];
   sizes: string[];
@@ -100,6 +115,11 @@ export interface ProductDetail extends Product {
   sauceOptions?: string[];
   portionOptions?: string[];
   relatedProducts: Product[];
+  ingredients?: string[];
+  tastingGuide?: string;
+  averageRating?: number;
+  totalReviews?: number;
+  reviews?: ProductReview[];
 }
 
 export interface DIYOptionItem {
@@ -214,7 +234,15 @@ export interface OrderDetailResponse {
   totalPrice: number;
   isCustomDIY: boolean;
   customNotes?: string;
+  imageUrl?: string;
   toppings: OrderItemOptionResponse[];
+}
+
+export interface OrderStatusHistory {
+  id: number;
+  status: string;
+  note: string;
+  createdAt: string;
 }
 
 export interface OrderResponse {
@@ -232,8 +260,11 @@ export interface OrderResponse {
   customerPhone: string;
   shippingAddress: string;
   note: string;
+  cancelReason?: string;
+  canCancel?: boolean;
   createdAt: string;
   items: OrderDetailResponse[];
+  statusHistories?: OrderStatusHistory[];
 
   // Delivery & Shipper info
   shipperId?: number;

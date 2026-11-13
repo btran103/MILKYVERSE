@@ -1,0 +1,28 @@
+# Visual Studio
+**/.vs/
+
+# .NET build files
+**/bin/
+**/obj/
+
+# Node.js
+**/node_modules/
+**/.next/
+**/out/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+*.user
+*.suo
+
+# Logs
+*.log
+
+# Test results
+**/TestResults/
+coverage/

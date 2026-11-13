@@ -14,6 +14,7 @@ public class BusinessLogicTests
     {
         var options = new DbContextOptionsBuilder<MilkyVerseDbContext>()
             .UseInMemoryDatabase(databaseName: dbName)
+            .ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         return new MilkyVerseDbContext(options);
@@ -32,14 +33,18 @@ public class BusinessLogicTests
         var config = new ConfigurationBuilder().AddInMemoryCollection(inMemoryConfig).Build();
         var authService = new AuthService(context, config);
 
-        // 1. Register
+        // 1. Register with OTP
+        var otpRes = await authService.SendEmailOtpAsync("test@milkyverse.com");
+        Assert.True(otpRes.Success);
+
         var registerRes = await authService.RegisterAsync(new RegisterRequest
         {
             FullName = "Nguyen Van Test",
             Email = "test@milkyverse.com",
             Password = "Password@123",
             PhoneNumber = "0900000000",
-            Address = "HCM City"
+            Address = "HCM City",
+            VerificationCode = otpRes.Data!.Code
         });
 
         Assert.True(registerRes.Success);
@@ -175,5 +180,58 @@ public class BusinessLogicTests
         var txs = await inventoryService.GetTransactionsAsync(ingredient.Id);
         Assert.NotEmpty(txs.Data!);
         Assert.Equal("IMPORT", txs.Data![0].TransactionType);
+    }
+
+    [Theory]
+    [InlineData("Admin", false)]
+    [InlineData("Manager", false)]
+    [InlineData("WarehouseStaff", false)]
+    [InlineData("DeliveryStaff", false)]
+    [InlineData("Staff", true)]
+    [InlineData("Customer", true)]
+    public async Task OrderService_CreateOrder_RoleRestrictions(string role, bool expectedSuccess)
+    {
+        using var context = GetInMemoryDbContext(Guid.NewGuid().ToString());
+
+        var user = new User
+        {
+            FullName = "Test " + role,
+            Email = $"{role.ToLower()}@test.com",
+            PasswordHash = "hashed",
+            Role = role
+        };
+        context.Users.Add(user);
+
+        var product = new Product
+        {
+            Name = "Trà Sữa Truyền Thống",
+            BasePrice = 30000,
+            IsActive = true,
+            ProductType = "DRINK"
+        };
+        context.Products.Add(product);
+        await context.SaveChangesAsync();
+
+        var orderService = new OrderService(context);
+        var orderRequest = new CreateOrderRequest
+        {
+            CustomerName = "Nguyễn Văn A",
+            CustomerPhone = "0987654321",
+            ShippingAddress = "123 Đường ABC",
+            PaymentMethod = "COD",
+            Items = new List<CreateOrderItemRequest>
+            {
+                new CreateOrderItemRequest
+                {
+                    ProductId = product.Id,
+                    ProductName = product.Name,
+                    Quantity = 1,
+                    Size = "M"
+                }
+            }
+        };
+
+        var result = await orderService.CreateOrderAsync(user.Id, orderRequest);
+        Assert.Equal(expectedSuccess, result.Success);
     }
 }

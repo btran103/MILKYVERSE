@@ -213,7 +213,8 @@ public class AuthService : IAuthService
             Email = user.Email,
             Role = user.Role,
             PhoneNumber = user.PhoneNumber,
-            Address = user.Address
+            Address = user.Address,
+            AvatarUrl = user.AvatarUrl
         }, "Đăng ký và xác thực tài khoản thành công!");
     }
 
@@ -237,7 +238,8 @@ public class AuthService : IAuthService
             Email = user.Email,
             Role = user.Role,
             PhoneNumber = user.PhoneNumber,
-            Address = user.Address
+            Address = user.Address,
+            AvatarUrl = user.AvatarUrl
         }, "Đăng nhập thành công!");
     }
 
@@ -256,6 +258,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             PhoneNumber = user.PhoneNumber,
             Address = user.Address,
+            AvatarUrl = user.AvatarUrl,
             Role = user.Role,
             CreatedAt = user.CreatedAt
         });
@@ -272,6 +275,10 @@ public class AuthService : IAuthService
         user.FullName = request.FullName ?? user.FullName;
         user.PhoneNumber = request.PhoneNumber ?? "";
         user.Address = request.Address ?? "";
+        if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
+        {
+            user.AvatarUrl = request.AvatarUrl;
+        }
         user.UpdatedAt = DateTime.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(request.Password))
@@ -288,6 +295,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             PhoneNumber = user.PhoneNumber ?? "",
             Address = user.Address ?? "",
+            AvatarUrl = user.AvatarUrl,
             Role = user.Role,
             CreatedAt = user.CreatedAt
         }, "Cập nhật hồ sơ thành công!");

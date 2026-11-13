@@ -1,15 +1,95 @@
+using Microsoft.EntityFrameworkCore;
 using MilkyVerse.Api.Models;
 
 namespace MilkyVerse.Api.Data;
 
 public static class DbInitializer
 {
+    private static async Task EnsureColumnExistsAsync(MilkyVerseDbContext context, string tableName, string columnName, string columnType)
+    {
+        try
+        {
+            var connection = context.Database.GetDbConnection();
+            if (connection.State != System.Data.ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
+
+            bool columnExists = false;
+            if (context.Database.IsSqlite())
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"PRAGMA table_info({tableName});";
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    if (string.Equals(reader["name"]?.ToString(), columnName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        columnExists = true;
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = $"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{tableName}' AND COLUMN_NAME = '{columnName}';";
+                var result = await cmd.ExecuteScalarAsync();
+                columnExists = Convert.ToInt32(result) > 0;
+            }
+
+            if (!columnExists)
+            {
+                await context.Database.ExecuteSqlRawAsync($"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType};");
+            }
+        }
+        catch
+        {
+            // Best effort migration fallback
+        }
+    }
+
     public static async Task SeedAsync(MilkyVerseDbContext context)
     {
         await context.Database.EnsureCreatedAsync();
+        await EnsureColumnExistsAsync(context, "Users", "AvatarUrl", "TEXT");
+        await EnsureColumnExistsAsync(context, "Orders", "CancelReason", "TEXT");
 
         if (context.Users.Any())
         {
+            if (!context.Users.Any(u => u.Email == "quay@milkyverse.com"))
+            {
+                context.Users.Add(new User
+                {
+                    FullName = "Nguyễn Thu Ngân (Phục vụ tại quầy)",
+                    Email = "quay@milkyverse.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Staff@123"),
+                    PhoneNumber = "0908889999",
+                    Address = "Chi nhánh MilkyVerse Quận 1, TP.HCM",
+                    Role = "Staff",
+                    AvatarUrl = "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
+                    IsActive = true,
+                    IsEmailVerified = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            if (!context.Promotions.Any(p => p.Code == "MK2095F54" || p.Code == "#MK2095F54"))
+            {
+                context.Promotions.Add(new Promotion
+                {
+                    Code = "#MK2095F54",
+                    Description = "Voucher ưu đãi tri ân khách hàng MilkyVerse - Giảm ngay 25.000đ",
+                    DiscountPercent = 0,
+                    DiscountAmount = 25000,
+                    MinOrderValue = 40000,
+                    MaxUsage = 10000,
+                    UsedCount = 0,
+                    StartDate = DateTime.UtcNow.AddDays(-30),
+                    EndDate = DateTime.UtcNow.AddYears(1),
+                    IsActive = true
+                });
+            }
+            await context.SaveChangesAsync();
             return; // DB has been seeded
         }
 
@@ -18,11 +98,11 @@ public static class DbInitializer
         // ==========================================
         var admin = new User
         {
-            FullName = "Quản trị viên MilkyVerse",
+            FullName = "Quáº£n trá»‹ viÃªn MilkyVerse",
             Email = "admin@milkyverse.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
             PhoneNumber = "0901234567",
-            Address = "Số 1 Đường Thiên Hà, Quận 1, TP.HCM",
+            Address = "Sá»‘ 1 ÄÆ°á»ng ThiÃªn HÃ , Quáº­n 1, TP.HCM",
             Role = "Admin",
             IsActive = true,
             IsEmailVerified = true,
@@ -31,11 +111,11 @@ public static class DbInitializer
 
         var manager = new User
         {
-            FullName = "Lê Quản Lý (Cửa hàng trưởng)",
+            FullName = "LÃª Quáº£n LÃ½ (Cá»­a hÃ ng trÆ°á»Ÿng)",
             Email = "manager@milkyverse.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Manager@123"),
             PhoneNumber = "0903334455",
-            Address = "Số 88 Đường Vũ Trụ, Quận 1, TP.HCM",
+            Address = "Sá»‘ 88 ÄÆ°á»ng VÅ© Trá»¥, Quáº­n 1, TP.HCM",
             Role = "Manager",
             IsActive = true,
             IsEmailVerified = true,
@@ -44,11 +124,11 @@ public static class DbInitializer
 
         var staff = new User
         {
-            FullName = "Nguyễn Barista & Bếp (Nhân viên quầy)",
+            FullName = "Nguyá»…n Barista & Báº¿p (NhÃ¢n viÃªn quáº§y)",
             Email = "staff@milkyverse.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Staff@123"),
             PhoneNumber = "0909876543",
-            Address = "Chi nhánh MilkyVerse Quận 3, TP.HCM",
+            Address = "Chi nhÃ¡nh MilkyVerse Quáº­n 3, TP.HCM",
             Role = "Staff",
             IsActive = true,
             IsEmailVerified = true,
@@ -57,11 +137,11 @@ public static class DbInitializer
 
         var warehouse = new User
         {
-            FullName = "Phạm Thủ Kho (Quản lý kho & FEFO)",
+            FullName = "Pháº¡m Thá»§ Kho (Quáº£n lÃ½ kho & FEFO)",
             Email = "warehouse@milkyverse.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Warehouse@123"),
             PhoneNumber = "0911223344",
-            Address = "Kho Tổng MilkyVerse, Bình Thạnh, TP.HCM",
+            Address = "Kho Tá»•ng MilkyVerse, BÃ¬nh Tháº¡nh, TP.HCM",
             Role = "WarehouseStaff",
             IsActive = true,
             IsEmailVerified = true,
@@ -70,11 +150,11 @@ public static class DbInitializer
 
         var shipper = new User
         {
-            FullName = "Hoàng Giao Hàng (Shipper MilkyVerse)",
+            FullName = "HoÃ ng Giao HÃ ng (Shipper MilkyVerse)",
             Email = "shipper@milkyverse.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Shipper@123"),
             PhoneNumber = "0977889900",
-            Address = "Đội Giao Vận MilkyVerse Galaxy Express",
+            Address = "Äá»™i Giao Váº­n MilkyVerse Galaxy Express",
             Role = "DeliveryStaff",
             IsActive = true,
             IsEmailVerified = true,
@@ -83,11 +163,11 @@ public static class DbInitializer
 
         var customer = new User
         {
-            FullName = "Trần Bảo Ngọc (Khách VIP)",
+            FullName = "Tráº§n Báº£o Ngá»c (KhÃ¡ch VIP)",
             Email = "khachhang@milkyverse.com",
             PasswordHash = BCrypt.Net.BCrypt.HashPassword("Customer@123"),
             PhoneNumber = "0988776655",
-            Address = "123 Đường Sữa Tươi, Phường Bến Nghé, Quận 1, TP.HCM",
+            Address = "123 ÄÆ°á»ng Sá»¯a TÆ°Æ¡i, PhÆ°á»ng Báº¿n NghÃ©, Quáº­n 1, TP.HCM",
             Role = "Customer",
             IsActive = true,
             IsEmailVerified = true,
@@ -103,10 +183,10 @@ public static class DbInitializer
         // Drinks (11 Drink Categories)
         var catClassic = new Category
         {
-            Name = "Trà Sữa Truyền Thống",
+            Name = "TrÃ  Sá»¯a Truyá»n Thá»‘ng",
             Slug = "tra-sua-truyen-thong",
             CategoryType = "DRINK",
-            Description = "Hương vị trà sữa cổ điển đậm đà từ lá hồng trà tuyển chọn và sữa béo ngậy chuẩn vị Đài Loan.",
+            Description = "HÆ°Æ¡ng vá»‹ trÃ  sá»¯a cá»• Ä‘iá»ƒn Ä‘áº­m Ä‘Ã  tá»« lÃ¡ há»“ng trÃ  tuyá»ƒn chá»n vÃ  sá»¯a bÃ©o ngáº­y chuáº©n vá»‹ ÄÃ i Loan.",
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 1,
             IsActive = true
@@ -114,10 +194,10 @@ public static class DbInitializer
 
         var catFruit = new Category
         {
-            Name = "Trà Trái Cây",
+            Name = "TrÃ  TrÃ¡i CÃ¢y",
             Slug = "tra-trai-cay",
             CategoryType = "DRINK",
-            Description = "Thanh mát giải nhiệt với 100% trái cây nhiệt đới tươi ngon tự nhiên giàu vitamin.",
+            Description = "Thanh mÃ¡t giáº£i nhiá»‡t vá»›i 100% trÃ¡i cÃ¢y nhiá»‡t Ä‘á»›i tÆ°Æ¡i ngon tá»± nhiÃªn giÃ u vitamin.",
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 2,
             IsActive = true
@@ -125,10 +205,10 @@ public static class DbInitializer
 
         var catPureTea = new Category
         {
-            Name = "Trà Nguyên Chất & Trà Pha Vị",
+            Name = "TrÃ  NguyÃªn Cháº¥t & TrÃ  Pha Vá»‹",
             Slug = "tra-nguyen-chat-pha-vi",
             CategoryType = "DRINK",
-            Description = "Thưởng thức cốt trà mộc thanh khiết tuyển chọn từ những đồi trà danh tiếng và các biến tấu pha vị mộc mạc.",
+            Description = "ThÆ°á»Ÿng thá»©c cá»‘t trÃ  má»™c thanh khiáº¿t tuyá»ƒn chá»n tá»« nhá»¯ng Ä‘á»“i trÃ  danh tiáº¿ng vÃ  cÃ¡c biáº¿n táº¥u pha vá»‹ má»™c máº¡c.",
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 3,
             IsActive = true
@@ -136,10 +216,10 @@ public static class DbInitializer
 
         var catCheese = new Category
         {
-            Name = "Trà Macchiato & Kem Cheese",
+            Name = "TrÃ  Macchiato & Kem Cheese",
             Slug = "tra-macchiato-kem-cheese",
             CategoryType = "DRINK",
-            Description = "Lớp kem sữa phô mai Anchor bồng bềnh béo mặn sánh mịn kết hợp nền trà hảo hạng thơm mát.",
+            Description = "Lá»›p kem sá»¯a phÃ´ mai Anchor bá»“ng bá»nh bÃ©o máº·n sÃ¡nh má»‹n káº¿t há»£p ná»n trÃ  háº£o háº¡ng thÆ¡m mÃ¡t.",
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 4,
             IsActive = true
@@ -147,10 +227,10 @@ public static class DbInitializer
 
         var catFreshMilkDrink = new Category
         {
-            Name = "Sữa Tươi & Đồ Uống Sữa",
+            Name = "Sá»¯a TÆ°Æ¡i & Äá»“ Uá»‘ng Sá»¯a",
             Slug = "sua-tuoi-do-uong-sua",
             CategoryType = "DRINK",
-            Description = "Sữa tươi thanh trùng Đà Lạt nguyên chất 100% béo ngậy tự nhiên kết hợp các nguyên liệu thượng hạng.",
+            Description = "Sá»¯a tÆ°Æ¡i thanh trÃ¹ng ÄÃ  Láº¡t nguyÃªn cháº¥t 100% bÃ©o ngáº­y tá»± nhiÃªn káº¿t há»£p cÃ¡c nguyÃªn liá»‡u thÆ°á»£ng háº¡ng.",
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 5,
             IsActive = true
@@ -158,10 +238,10 @@ public static class DbInitializer
 
         var catMatchaCacao = new Category
         {
-            Name = "Matcha & Đồ Uống Cacao",
+            Name = "Matcha & Äá»“ Uá»‘ng Cacao",
             Slug = "matcha-cacao",
             CategoryType = "DRINK",
-            Description = "Nghệ thuật pha chế bột trà xanh Uji Nhật Bản và cacao nguyên chất thơm lừng nồng nàn.",
+            Description = "Nghá»‡ thuáº­t pha cháº¿ bá»™t trÃ  xanh Uji Nháº­t Báº£n vÃ  cacao nguyÃªn cháº¥t thÆ¡m lá»«ng ná»“ng nÃ n.",
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 6,
             IsActive = true
@@ -169,10 +249,10 @@ public static class DbInitializer
 
         var catFrappeIceBlended = new Category
         {
-            Name = "Frappe & Đồ Uống Đá Xay",
+            Name = "Frappe & Äá»“ Uá»‘ng ÄÃ¡ Xay",
             Slug = "frappe-da-xay",
             CategoryType = "DRINK",
-            Description = "Thức uống đá xay tuyết sánh mịn mát lạnh, phủ kem whipping béo ngậy bồng bềnh phong cách hiện đại.",
+            Description = "Thá»©c uá»‘ng Ä‘Ã¡ xay tuyáº¿t sÃ¡nh má»‹n mÃ¡t láº¡nh, phá»§ kem whipping bÃ©o ngáº­y bá»“ng bá»nh phong cÃ¡ch hiá»‡n Ä‘áº¡i.",
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 7,
             IsActive = true
@@ -180,10 +260,10 @@ public static class DbInitializer
 
         var catFruitJuice = new Category
         {
-            Name = "Nước Ép Trái Cây",
+            Name = "NÆ°á»›c Ã‰p TrÃ¡i CÃ¢y",
             Slug = "nuoc-ep-trai-cay",
             CategoryType = "DRINK",
-            Description = "100% nước ép nguyên chất từ hoa quả tươi hữu cơ, không thêm đường hóa học, thanh lọc cơ thể.",
+            Description = "100% nÆ°á»›c Ã©p nguyÃªn cháº¥t tá»« hoa quáº£ tÆ°Æ¡i há»¯u cÆ¡, khÃ´ng thÃªm Ä‘Æ°á»ng hÃ³a há»c, thanh lá»c cÆ¡ thá»ƒ.",
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 8,
             IsActive = true
@@ -191,10 +271,10 @@ public static class DbInitializer
 
         var catSodaGas = new Category
         {
-            Name = "Soda & Đồ Uống Có Gas",
+            Name = "Soda & Äá»“ Uá»‘ng CÃ³ Gas",
             Slug = "soda-do-uong-co-gas",
             CategoryType = "DRINK",
-            Description = "Soda bọt ga sảng khoái kết hợp siro trái cây nhập khẩu và lá bạc hà mát lạnh xua tan nắng hè.",
+            Description = "Soda bá»t ga sáº£ng khoÃ¡i káº¿t há»£p siro trÃ¡i cÃ¢y nháº­p kháº©u vÃ  lÃ¡ báº¡c hÃ  mÃ¡t láº¡nh xua tan náº¯ng hÃ¨.",
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 9,
             IsActive = true
@@ -202,10 +282,10 @@ public static class DbInitializer
 
         var catLemonRefreshment = new Category
         {
-            Name = "Nước Chanh & Đồ Uống Giải Khát",
+            Name = "NÆ°á»›c Chanh & Äá»“ Uá»‘ng Giáº£i KhÃ¡t",
             Slug = "nuoc-chanh-giai-khat",
             CategoryType = "DRINK",
-            Description = "Các món nước giải khát dân dã mộc mạc từ chanh tươi, tắc, mơ, sấu, dừa xiêm tự nhiên mát ruột.",
+            Description = "CÃ¡c mÃ³n nÆ°á»›c giáº£i khÃ¡t dÃ¢n dÃ£ má»™c máº¡c tá»« chanh tÆ°Æ¡i, táº¯c, mÆ¡, sáº¥u, dá»«a xiÃªm tá»± nhiÃªn mÃ¡t ruá»™t.",
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 10,
             IsActive = true
@@ -213,10 +293,10 @@ public static class DbInitializer
 
         var catCoffee = new Category
         {
-            Name = "Cà Phê & Đồ Uống Bổ Sung",
+            Name = "CÃ  PhÃª & Äá»“ Uá»‘ng Bá»• Sung",
             Slug = "ca-phe-do-uong-bo-sung",
             CategoryType = "DRINK",
-            Description = "Hạt cà phê Robusta Buôn Ma Thuột & Arabica Cầu Đất phối trộn tinh tế, đánh thức mọi nguồn cảm hứng.",
+            Description = "Háº¡t cÃ  phÃª Robusta BuÃ´n Ma Thuá»™t & Arabica Cáº§u Äáº¥t phá»‘i trá»™n tinh táº¿, Ä‘Ã¡nh thá»©c má»i nguá»“n cáº£m há»©ng.",
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 11,
             IsActive = true
@@ -224,10 +304,10 @@ public static class DbInitializer
 
         var catOolong = new Category
         {
-            Name = "Trà Sữa Oolong & Rang",
+            Name = "TrÃ  Sá»¯a Oolong & Rang",
             Slug = "tra-sua-oolong-rang",
             CategoryType = "DRINK",
-            Description = "Hậu vị sâu lắng, thơm nồng khói gỗ và trà ô long thượng hạng từ cao nguyên.",
+            Description = "Háº­u vá»‹ sÃ¢u láº¯ng, thÆ¡m ná»“ng khÃ³i gá»— vÃ  trÃ  Ã´ long thÆ°á»£ng háº¡ng tá»« cao nguyÃªn.",
             ImageUrl = "https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 12,
             IsActive = true
@@ -236,10 +316,10 @@ public static class DbInitializer
         // Food Categories (10 categories required)
         var catVienChien = new Category
         {
-            Name = "Cá Viên & Các Loại Viên Chiên",
+            Name = "CÃ¡ ViÃªn & CÃ¡c Loáº¡i ViÃªn ChiÃªn",
             Slug = "vien-chien",
             CategoryType = "FOOD",
-            Description = "Các loại viên chiên vàng ruộm giòn rụm: cá viên, bò viên, mực viên, thanh cua chấm tương đen & sốt bơ trứng.",
+            Description = "CÃ¡c loáº¡i viÃªn chiÃªn vÃ ng ruá»™m giÃ²n rá»¥m: cÃ¡ viÃªn, bÃ² viÃªn, má»±c viÃªn, thanh cua cháº¥m tÆ°Æ¡ng Ä‘en & sá»‘t bÆ¡ trá»©ng.",
             ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 5,
             IsActive = true
@@ -247,10 +327,10 @@ public static class DbInitializer
 
         var catGaChanGa = new Category
         {
-            Name = "Gà & Các Món Chân Gà",
+            Name = "GÃ  & CÃ¡c MÃ³n ChÃ¢n GÃ ",
             Slug = "ga-chan-ga",
             CategoryType = "FOOD",
-            Description = "Chân gà sốt Thái rút xương giòn sần sật, sả tắc thơm lừng, cánh gà chiên mắm và gà lắc phô mai đậm đà.",
+            Description = "ChÃ¢n gÃ  sá»‘t ThÃ¡i rÃºt xÆ°Æ¡ng giÃ²n sáº§n sáº­t, sáº£ táº¯c thÆ¡m lá»«ng, cÃ¡nh gÃ  chiÃªn máº¯m vÃ  gÃ  láº¯c phÃ´ mai Ä‘áº­m Ä‘Ã .",
             ImageUrl = "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 6,
             IsActive = true
@@ -258,10 +338,10 @@ public static class DbInitializer
 
         var catKhoai = new Category
         {
-            Name = "Khoai Tây & Các Món Từ Khoai",
+            Name = "Khoai TÃ¢y & CÃ¡c MÃ³n Tá»« Khoai",
             Slug = "khoai-tay-khoai-lang",
             CategoryType = "FOOD",
-            Description = "Khoai tây chiên giòn rụm lắc phô mai, rong biển, BBQ, khoai lang kén béo bùi chuẩn vị ăn vặt tuổi thơ.",
+            Description = "Khoai tÃ¢y chiÃªn giÃ²n rá»¥m láº¯c phÃ´ mai, rong biá»ƒn, BBQ, khoai lang kÃ©n bÃ©o bÃ¹i chuáº©n vá»‹ Äƒn váº·t tuá»•i thÆ¡.",
             ImageUrl = "https://images.unsplash.com/photo-1576107232684-1279f3908594?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 7,
             IsActive = true
@@ -269,10 +349,10 @@ public static class DbInitializer
 
         var catPhoMaiXucXich = new Category
         {
-            Name = "Phô Mai, Xúc Xích & Đồ Chiên",
+            Name = "PhÃ´ Mai, XÃºc XÃ­ch & Äá»“ ChiÃªn",
             Slug = "pho-mai-xuc-xich-do-chien",
             CategoryType = "FOOD",
-            Description = "Phô mai que kéo sợi ngập tràn, xúc xích lốc xoáy, nem chua rán phố cổ và há cảo chiên giòn tan.",
+            Description = "PhÃ´ mai que kÃ©o sá»£i ngáº­p trÃ n, xÃºc xÃ­ch lá»‘c xoÃ¡y, nem chua rÃ¡n phá»‘ cá»• vÃ  hÃ¡ cáº£o chiÃªn giÃ²n tan.",
             ImageUrl = "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 8,
             IsActive = true
@@ -280,10 +360,10 @@ public static class DbInitializer
 
         var catBanhTrang = new Category
         {
-            Name = "Bánh Tráng & Các Món Trộn",
+            Name = "BÃ¡nh TrÃ¡ng & CÃ¡c MÃ³n Trá»™n",
             Slug = "banh-trang-mon-tron",
             CategoryType = "FOOD",
-            Description = "Bánh tráng trộn bò khô sả tế cay nồng, bánh tráng nướng Đà Lạt giòn rụm, bánh tráng cuốn sốt me bơ trứng béo ngậy.",
+            Description = "BÃ¡nh trÃ¡ng trá»™n bÃ² khÃ´ sáº£ táº¿ cay ná»“ng, bÃ¡nh trÃ¡ng nÆ°á»›ng ÄÃ  Láº¡t giÃ²n rá»¥m, bÃ¡nh trÃ¡ng cuá»‘n sá»‘t me bÆ¡ trá»©ng bÃ©o ngáº­y.",
             ImageUrl = "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 9,
             IsActive = true
@@ -291,10 +371,10 @@ public static class DbInitializer
 
         var catTrungChen = new Category
         {
-            Name = "Trứng Chén & Món Trứng Nướng",
+            Name = "Trá»©ng ChÃ©n & MÃ³n Trá»©ng NÆ°á»›ng",
             Slug = "trung-chen-mon-trung",
             CategoryType = "FOOD",
-            Description = "Trứng chén nướng mỡ hành phô mai kéo sợi thơm phức, cút lộn xào me chua ngọt đậm đà cuốn hút.",
+            Description = "Trá»©ng chÃ©n nÆ°á»›ng má»¡ hÃ nh phÃ´ mai kÃ©o sá»£i thÆ¡m phá»©c, cÃºt lá»™n xÃ o me chua ngá»t Ä‘áº­m Ä‘Ã  cuá»‘n hÃºt.",
             ImageUrl = "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 10,
             IsActive = true
@@ -302,10 +382,10 @@ public static class DbInitializer
 
         var catMiCay = new Category
         {
-            Name = "Mì & Các Món Cay 7 Cấp Độ",
+            Name = "MÃ¬ & CÃ¡c MÃ³n Cay 7 Cáº¥p Äá»™",
             Slug = "mi-mon-cay",
             CategoryType = "FOOD",
-            Description = "Mì cay Hàn Quốc 7 cấp độ bò Mỹ hải sản cay xuýt xoa, mì trộn xúc xích phô mai trứng lòng đào nóng hổi.",
+            Description = "MÃ¬ cay HÃ n Quá»‘c 7 cáº¥p Ä‘á»™ bÃ² Má»¹ háº£i sáº£n cay xuÃ½t xoa, mÃ¬ trá»™n xÃºc xÃ­ch phÃ´ mai trá»©ng lÃ²ng Ä‘Ã o nÃ³ng há»•i.",
             ImageUrl = "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 11,
             IsActive = true
@@ -313,10 +393,10 @@ public static class DbInitializer
 
         var catComNo = new Category
         {
-            Name = "Cơm Chiên & Món Ăn No",
+            Name = "CÆ¡m ChiÃªn & MÃ³n Ä‚n No",
             Slug = "com-mon-no",
             CategoryType = "FOOD",
-            Description = "Cơm chiên kim chi bò Mỹ hạt cơm tơi giòn, cơm chiên hải sản hạt vàng ươm, kimbap chiên giòn ấm bụng.",
+            Description = "CÆ¡m chiÃªn kim chi bÃ² Má»¹ háº¡t cÆ¡m tÆ¡i giÃ²n, cÆ¡m chiÃªn háº£i sáº£n háº¡t vÃ ng Æ°Æ¡m, kimbap chiÃªn giÃ²n áº¥m bá»¥ng.",
             ImageUrl = "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 12,
             IsActive = true
@@ -324,10 +404,10 @@ public static class DbInitializer
 
         var catNoiTang = new Category
         {
-            Name = "Nội Tạng Nướng & Xiên Nướng",
+            Name = "Ná»™i Táº¡ng NÆ°á»›ng & XiÃªn NÆ°á»›ng",
             Slug = "noi-tang-mon-nuong",
             CategoryType = "FOOD",
-            Description = "Lòng nướng sa tế đậm đà than hồng, dồi sụn nướng giòn sần sật, sụn gà rang muối và xiên que nướng cay.",
+            Description = "LÃ²ng nÆ°á»›ng sa táº¿ Ä‘áº­m Ä‘Ã  than há»“ng, dá»“i sá»¥n nÆ°á»›ng giÃ²n sáº§n sáº­t, sá»¥n gÃ  rang muá»‘i vÃ  xiÃªn que nÆ°á»›ng cay.",
             ImageUrl = "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 13,
             IsActive = true
@@ -335,10 +415,10 @@ public static class DbInitializer
 
         var catAnVatBoSung = new Category
         {
-            Name = "Đồ Ăn Vặt Bổ Sung",
+            Name = "Äá»“ Ä‚n Váº·t Bá»• Sung",
             Slug = "an-vat-bo-sung",
             CategoryType = "FOOD",
-            Description = "Bắp xào bơ tép thơm nức mũi, bánh gạo tokbokki cay ngọt phô mai, khô gà lá chanh cay xé nhâm nhi cực đã.",
+            Description = "Báº¯p xÃ o bÆ¡ tÃ©p thÆ¡m ná»©c mÅ©i, bÃ¡nh gáº¡o tokbokki cay ngá»t phÃ´ mai, khÃ´ gÃ  lÃ¡ chanh cay xÃ© nhÃ¢m nhi cá»±c Ä‘Ã£.",
             ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 14,
             IsActive = true
@@ -346,10 +426,10 @@ public static class DbInitializer
 
         var catCombo = new Category
         {
-            Name = "Combo Thức Ăn & Nước Uống",
+            Name = "Combo Thá»©c Ä‚n & NÆ°á»›c Uá»‘ng",
             Slug = "combo-an-uong",
             CategoryType = "COMBO",
-            Description = "Combo kết hợp tuyệt hảo giữa trà sữa mát lạnh và các món ăn vặt nóng giòn với mức giá siêu ưu đãi.",
+            Description = "Combo káº¿t há»£p tuyá»‡t háº£o giá»¯a trÃ  sá»¯a mÃ¡t láº¡nh vÃ  cÃ¡c mÃ³n Äƒn váº·t nÃ³ng giÃ²n vá»›i má»©c giÃ¡ siÃªu Æ°u Ä‘Ã£i.",
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             DisplayOrder = 15,
             IsActive = true
@@ -367,28 +447,28 @@ public static class DbInitializer
         // ==========================================
         // 3. INGREDIENTS (DRINK & FOOD & WAREHOUSE)
         // ==========================================
-        var ingBlackTea = new Ingredient { Name = "Cốt Hồng Trà Ceylon", Unit = "ml", CurrentStock = 25000, MinAlertThreshold = 3000, UnitCost = 30, CategoryType = "BEVERAGE" };
-        var ingGreenTea = new Ingredient { Name = "Cốt Lục Trà Lài", Unit = "ml", CurrentStock = 20000, MinAlertThreshold = 3000, UnitCost = 35, CategoryType = "BEVERAGE" };
-        var ingOolongTea = new Ingredient { Name = "Cốt Ô Long Rang Khói", Unit = "ml", CurrentStock = 18000, MinAlertThreshold = 2500, UnitCost = 45, CategoryType = "BEVERAGE" };
-        var ingFreshMilk = new Ingredient { Name = "Sữa Tươi Thanh Trùng Dalat", Unit = "ml", CurrentStock = 30000, MinAlertThreshold = 5000, UnitCost = 28, CategoryType = "BEVERAGE" };
-        var ingSugarSyrup = new Ingredient { Name = "Nước Đường Mía Tự Nhiên", Unit = "ml", CurrentStock = 40000, MinAlertThreshold = 5000, UnitCost = 15, CategoryType = "BEVERAGE" };
-        var ingPearl = new Ingredient { Name = "Trân Châu Đen Hoàng Kim", Unit = "g", CurrentStock = 15000, MinAlertThreshold = 2000, UnitCost = 50, CategoryType = "BEVERAGE" };
-        var ingWhitePearl = new Ingredient { Name = "Trân Châu Trắng 3Q Giòn", Unit = "g", CurrentStock = 12000, MinAlertThreshold = 1500, UnitCost = 65, CategoryType = "BEVERAGE" };
-        var ingCheeseFoam = new Ingredient { Name = "Kem Phô Mai Cheese Foam", Unit = "g", CurrentStock = 8000, MinAlertThreshold = 1000, UnitCost = 110, CategoryType = "BEVERAGE" };
+        var ingBlackTea = new Ingredient { Name = "Cá»‘t Há»“ng TrÃ  Ceylon", Unit = "ml", CurrentStock = 25000, MinAlertThreshold = 3000, UnitCost = 30, CategoryType = "BEVERAGE" };
+        var ingGreenTea = new Ingredient { Name = "Cá»‘t Lá»¥c TrÃ  LÃ i", Unit = "ml", CurrentStock = 20000, MinAlertThreshold = 3000, UnitCost = 35, CategoryType = "BEVERAGE" };
+        var ingOolongTea = new Ingredient { Name = "Cá»‘t Ã” Long Rang KhÃ³i", Unit = "ml", CurrentStock = 18000, MinAlertThreshold = 2500, UnitCost = 45, CategoryType = "BEVERAGE" };
+        var ingFreshMilk = new Ingredient { Name = "Sá»¯a TÆ°Æ¡i Thanh TrÃ¹ng Dalat", Unit = "ml", CurrentStock = 30000, MinAlertThreshold = 5000, UnitCost = 28, CategoryType = "BEVERAGE" };
+        var ingSugarSyrup = new Ingredient { Name = "NÆ°á»›c ÄÆ°á»ng MÃ­a Tá»± NhiÃªn", Unit = "ml", CurrentStock = 40000, MinAlertThreshold = 5000, UnitCost = 15, CategoryType = "BEVERAGE" };
+        var ingPearl = new Ingredient { Name = "TrÃ¢n ChÃ¢u Äen HoÃ ng Kim", Unit = "g", CurrentStock = 15000, MinAlertThreshold = 2000, UnitCost = 50, CategoryType = "BEVERAGE" };
+        var ingWhitePearl = new Ingredient { Name = "TrÃ¢n ChÃ¢u Tráº¯ng 3Q GiÃ²n", Unit = "g", CurrentStock = 12000, MinAlertThreshold = 1500, UnitCost = 65, CategoryType = "BEVERAGE" };
+        var ingCheeseFoam = new Ingredient { Name = "Kem PhÃ´ Mai Cheese Foam", Unit = "g", CurrentStock = 8000, MinAlertThreshold = 1000, UnitCost = 110, CategoryType = "BEVERAGE" };
 
         // Food Ingredients
-        var ingFishBall = new Ingredient { Name = "Cá Viên Thượng Hạng", Unit = "piece", CurrentStock = 1200, MinAlertThreshold = 200, UnitCost = 800, CategoryType = "FOOD" };
-        var ingBeefBall = new Ingredient { Name = "Bò Viên Gân Giòn", Unit = "piece", CurrentStock = 900, MinAlertThreshold = 150, UnitCost = 1200, CategoryType = "FOOD" };
-        var ingChickenFeet = new Ingredient { Name = "Chân Gà Rút Xương Tươi", Unit = "g", CurrentStock = 20000, MinAlertThreshold = 3000, UnitCost = 110, CategoryType = "FOOD" };
-        var ingPotato = new Ingredient { Name = "Khoai Tây Sợi Nhập Khẩu", Unit = "g", CurrentStock = 25000, MinAlertThreshold = 4000, UnitCost = 65, CategoryType = "FOOD" };
-        var ingCheeseStick = new Ingredient { Name = "Phô Mai Que Mozzarella", Unit = "piece", CurrentStock = 450, MinAlertThreshold = 80, UnitCost = 4500, CategoryType = "FOOD" };
-        var ingRicePaper = new Ingredient { Name = "Bánh Tráng Phơi Sương Tây Ninh", Unit = "g", CurrentStock = 10000, MinAlertThreshold = 2000, UnitCost = 40, CategoryType = "FOOD" };
-        var ingQuailEgg = new Ingredient { Name = "Trứng Cút Tươi", Unit = "piece", CurrentStock = 1500, MinAlertThreshold = 300, UnitCost = 1000, CategoryType = "FOOD" };
-        var ingNoodles = new Ingredient { Name = "Mì Sợi Hàn Quốc Nongshim", Unit = "portion", CurrentStock = 300, MinAlertThreshold = 50, UnitCost = 9000, CategoryType = "FOOD" };
-        var ingBeefSlice = new Ingredient { Name = "Bò Mỹ Ba Chỉ Cuộn", Unit = "g", CurrentStock = 15000, MinAlertThreshold = 2500, UnitCost = 250, CategoryType = "FOOD" };
-        var ingRice = new Ingredient { Name = "Cơm Nguội Chiên Hạt Tơi", Unit = "portion", CurrentStock = 200, MinAlertThreshold = 40, UnitCost = 5000, CategoryType = "FOOD" };
-        var ingSausage = new Ingredient { Name = "Xúc Xích Đức Xông Khói", Unit = "piece", CurrentStock = 500, MinAlertThreshold = 100, UnitCost = 4000, CategoryType = "FOOD" };
-        var ingThaiSauce = new Ingredient { Name = "Nước Sốt Thái Chua Cay Đặc Chế", Unit = "ml", CurrentStock = 10000, MinAlertThreshold = 1500, UnitCost = 80, CategoryType = "FOOD" };
+        var ingFishBall = new Ingredient { Name = "CÃ¡ ViÃªn ThÆ°á»£ng Háº¡ng", Unit = "piece", CurrentStock = 1200, MinAlertThreshold = 200, UnitCost = 800, CategoryType = "FOOD" };
+        var ingBeefBall = new Ingredient { Name = "BÃ² ViÃªn GÃ¢n GiÃ²n", Unit = "piece", CurrentStock = 900, MinAlertThreshold = 150, UnitCost = 1200, CategoryType = "FOOD" };
+        var ingChickenFeet = new Ingredient { Name = "ChÃ¢n GÃ  RÃºt XÆ°Æ¡ng TÆ°Æ¡i", Unit = "g", CurrentStock = 20000, MinAlertThreshold = 3000, UnitCost = 110, CategoryType = "FOOD" };
+        var ingPotato = new Ingredient { Name = "Khoai TÃ¢y Sá»£i Nháº­p Kháº©u", Unit = "g", CurrentStock = 25000, MinAlertThreshold = 4000, UnitCost = 65, CategoryType = "FOOD" };
+        var ingCheeseStick = new Ingredient { Name = "PhÃ´ Mai Que Mozzarella", Unit = "piece", CurrentStock = 450, MinAlertThreshold = 80, UnitCost = 4500, CategoryType = "FOOD" };
+        var ingRicePaper = new Ingredient { Name = "BÃ¡nh TrÃ¡ng PhÆ¡i SÆ°Æ¡ng TÃ¢y Ninh", Unit = "g", CurrentStock = 10000, MinAlertThreshold = 2000, UnitCost = 40, CategoryType = "FOOD" };
+        var ingQuailEgg = new Ingredient { Name = "Trá»©ng CÃºt TÆ°Æ¡i", Unit = "piece", CurrentStock = 1500, MinAlertThreshold = 300, UnitCost = 1000, CategoryType = "FOOD" };
+        var ingNoodles = new Ingredient { Name = "MÃ¬ Sá»£i HÃ n Quá»‘c Nongshim", Unit = "portion", CurrentStock = 300, MinAlertThreshold = 50, UnitCost = 9000, CategoryType = "FOOD" };
+        var ingBeefSlice = new Ingredient { Name = "BÃ² Má»¹ Ba Chá»‰ Cuá»™n", Unit = "g", CurrentStock = 15000, MinAlertThreshold = 2500, UnitCost = 250, CategoryType = "FOOD" };
+        var ingRice = new Ingredient { Name = "CÆ¡m Nguá»™i ChiÃªn Háº¡t TÆ¡i", Unit = "portion", CurrentStock = 200, MinAlertThreshold = 40, UnitCost = 5000, CategoryType = "FOOD" };
+        var ingSausage = new Ingredient { Name = "XÃºc XÃ­ch Äá»©c XÃ´ng KhÃ³i", Unit = "piece", CurrentStock = 500, MinAlertThreshold = 100, UnitCost = 4000, CategoryType = "FOOD" };
+        var ingThaiSauce = new Ingredient { Name = "NÆ°á»›c Sá»‘t ThÃ¡i Chua Cay Äáº·c Cháº¿", Unit = "ml", CurrentStock = 10000, MinAlertThreshold = 1500, UnitCost = 80, CategoryType = "FOOD" };
 
         context.Ingredients.AddRange(
             ingBlackTea, ingGreenTea, ingOolongTea, ingFreshMilk, ingSugarSyrup, ingPearl, ingWhitePearl, ingCheeseFoam,
@@ -400,29 +480,29 @@ public static class DbInitializer
         // ==========================================
         // 4. TOPPINGS (DRINKS & FOOD: 20 DRINK TOPPINGS + FOOD TOPPINGS)
         // ==========================================
-        var topPearl = new Topping { IngredientId = ingPearl.Id, Name = "Trân châu hoàng kim", Price = 10000, PortionAmount = 45, IsAvailable = true };
-        var topWhitePearl = new Topping { IngredientId = ingPearl.Id, Name = "Trân châu trắng", Price = 10000, PortionAmount = 45, IsAvailable = true };
-        var topBlackPearl = new Topping { IngredientId = ingPearl.Id, Name = "Trân châu đen", Price = 8000, PortionAmount = 45, IsAvailable = true };
-        var topBrownSugarPearl = new Topping { IngredientId = ingPearl.Id, Name = "Trân châu đường đen", Price = 10000, PortionAmount = 50, IsAvailable = true };
-        var topMiniPearl = new Topping { IngredientId = ingPearl.Id, Name = "Trân châu mini", Price = 8000, PortionAmount = 40, IsAvailable = true };
-        var topEggPudding = new Topping { IngredientId = ingPearl.Id, Name = "Pudding trứng", Price = 10000, PortionAmount = 60, IsAvailable = true };
+        var topPearl = new Topping { IngredientId = ingPearl.Id, Name = "TrÃ¢n chÃ¢u hoÃ ng kim", Price = 10000, PortionAmount = 45, IsAvailable = true };
+        var topWhitePearl = new Topping { IngredientId = ingPearl.Id, Name = "TrÃ¢n chÃ¢u tráº¯ng", Price = 10000, PortionAmount = 45, IsAvailable = true };
+        var topBlackPearl = new Topping { IngredientId = ingPearl.Id, Name = "TrÃ¢n chÃ¢u Ä‘en", Price = 8000, PortionAmount = 45, IsAvailable = true };
+        var topBrownSugarPearl = new Topping { IngredientId = ingPearl.Id, Name = "TrÃ¢n chÃ¢u Ä‘Æ°á»ng Ä‘en", Price = 10000, PortionAmount = 50, IsAvailable = true };
+        var topMiniPearl = new Topping { IngredientId = ingPearl.Id, Name = "TrÃ¢n chÃ¢u mini", Price = 8000, PortionAmount = 40, IsAvailable = true };
+        var topEggPudding = new Topping { IngredientId = ingPearl.Id, Name = "Pudding trá»©ng", Price = 10000, PortionAmount = 60, IsAvailable = true };
         var topChocoPudding = new Topping { IngredientId = ingPearl.Id, Name = "Pudding socola", Price = 10000, PortionAmount = 60, IsAvailable = true };
-        var topFruitJelly = new Topping { IngredientId = ingPearl.Id, Name = "Thạch trái cây", Price = 8000, PortionAmount = 45, IsAvailable = true };
-        var topCoconutJelly = new Topping { IngredientId = ingPearl.Id, Name = "Thạch dừa", Price = 8000, PortionAmount = 45, IsAvailable = true };
-        var topCoffeeJelly = new Topping { IngredientId = ingPearl.Id, Name = "Thạch cà phê", Price = 8000, PortionAmount = 45, IsAvailable = true };
-        var topAloeJelly = new Topping { IngredientId = ingPearl.Id, Name = "Thạch nha đam", Price = 8000, PortionAmount = 50, IsAvailable = true };
-        var topCheeseJelly = new Topping { IngredientId = ingPearl.Id, Name = "Thạch phô mai", Price = 12000, PortionAmount = 40, IsAvailable = true };
+        var topFruitJelly = new Topping { IngredientId = ingPearl.Id, Name = "Tháº¡ch trÃ¡i cÃ¢y", Price = 8000, PortionAmount = 45, IsAvailable = true };
+        var topCoconutJelly = new Topping { IngredientId = ingPearl.Id, Name = "Tháº¡ch dá»«a", Price = 8000, PortionAmount = 45, IsAvailable = true };
+        var topCoffeeJelly = new Topping { IngredientId = ingPearl.Id, Name = "Tháº¡ch cÃ  phÃª", Price = 8000, PortionAmount = 45, IsAvailable = true };
+        var topAloeJelly = new Topping { IngredientId = ingPearl.Id, Name = "Tháº¡ch nha Ä‘am", Price = 8000, PortionAmount = 50, IsAvailable = true };
+        var topCheeseJelly = new Topping { IngredientId = ingPearl.Id, Name = "Tháº¡ch phÃ´ mai", Price = 12000, PortionAmount = 40, IsAvailable = true };
         var topFlan = new Topping { IngredientId = ingPearl.Id, Name = "Flan", Price = 12000, PortionAmount = 70, IsAvailable = true };
-        var topRedBean = new Topping { IngredientId = ingPearl.Id, Name = "Đậu đỏ", Price = 8000, PortionAmount = 45, IsAvailable = true };
-        var topCrystalBobas = new Topping { IngredientId = ingPearl.Id, Name = "Hạt thủy tinh", Price = 10000, PortionAmount = 45, IsAvailable = true };
+        var topRedBean = new Topping { IngredientId = ingPearl.Id, Name = "Äáº­u Ä‘á»", Price = 8000, PortionAmount = 45, IsAvailable = true };
+        var topCrystalBobas = new Topping { IngredientId = ingPearl.Id, Name = "Háº¡t thá»§y tinh", Price = 10000, PortionAmount = 45, IsAvailable = true };
         var topCheeseFoam = new Topping { IngredientId = ingPearl.Id, Name = "Kem cheese", Price = 15000, PortionAmount = 50, IsAvailable = true };
-        var topEggCream = new Topping { IngredientId = ingPearl.Id, Name = "Kem trứng", Price = 15000, PortionAmount = 50, IsAvailable = true };
-        var topSaltCream = new Topping { IngredientId = ingPearl.Id, Name = "Kem muối", Price = 15000, PortionAmount = 50, IsAvailable = true };
-        var topOreoCrushed = new Topping { IngredientId = ingPearl.Id, Name = "Oreo nghiền", Price = 8000, PortionAmount = 30, IsAvailable = true };
-        var topGrassJelly = new Topping { IngredientId = ingPearl.Id, Name = "Sương sáo", Price = 8000, PortionAmount = 45, IsAvailable = true };
-        var topExtraCheese = new Topping { IngredientId = ingCheeseStick.Id, Name = "Thêm Phô Mai Kéo Sợi (Món Ăn)", Price = 12000, PortionAmount = 40, IsAvailable = true };
-        var topExtraEgg = new Topping { IngredientId = ingQuailEgg.Id, Name = "Thêm Trứng Ốp La Lòng Đào", Price = 8000, PortionAmount = 1, IsAvailable = true };
-        var topExtraSausage = new Topping { IngredientId = ingSausage.Id, Name = "Thêm Xúc Xích Đức Chiên", Price = 12000, PortionAmount = 1, IsAvailable = true };
+        var topEggCream = new Topping { IngredientId = ingPearl.Id, Name = "Kem trá»©ng", Price = 15000, PortionAmount = 50, IsAvailable = true };
+        var topSaltCream = new Topping { IngredientId = ingPearl.Id, Name = "Kem muá»‘i", Price = 15000, PortionAmount = 50, IsAvailable = true };
+        var topOreoCrushed = new Topping { IngredientId = ingPearl.Id, Name = "Oreo nghiá»n", Price = 8000, PortionAmount = 30, IsAvailable = true };
+        var topGrassJelly = new Topping { IngredientId = ingPearl.Id, Name = "SÆ°Æ¡ng sÃ¡o", Price = 8000, PortionAmount = 45, IsAvailable = true };
+        var topExtraCheese = new Topping { IngredientId = ingCheeseStick.Id, Name = "ThÃªm PhÃ´ Mai KÃ©o Sá»£i (MÃ³n Ä‚n)", Price = 12000, PortionAmount = 40, IsAvailable = true };
+        var topExtraEgg = new Topping { IngredientId = ingQuailEgg.Id, Name = "ThÃªm Trá»©ng á»p La LÃ²ng ÄÃ o", Price = 8000, PortionAmount = 1, IsAvailable = true };
+        var topExtraSausage = new Topping { IngredientId = ingSausage.Id, Name = "ThÃªm XÃºc XÃ­ch Äá»©c ChiÃªn", Price = 12000, PortionAmount = 1, IsAvailable = true };
 
         context.Toppings.AddRange(topPearl, topWhitePearl, topBlackPearl, topBrownSugarPearl, topMiniPearl, topEggPudding, topChocoPudding, topFruitJelly, topCoconutJelly, topCoffeeJelly, topAloeJelly, topCheeseJelly, topFlan, topRedBean, topCrystalBobas, topCheeseFoam, topEggCream, topSaltCream, topOreoCrushed, topGrassJelly, topExtraCheese, topExtraEgg, topExtraSausage);
         await context.SaveChangesAsync();
@@ -433,14 +513,14 @@ public static class DbInitializer
         var products = new List<Product>();
 
         // --- 5.1 Complete 163 Drink Products ---
-        // --- 5.1.1 Trà Sữa Truyền Thống ---
+        // --- 5.1.1 TrÃ  Sá»¯a Truyá»n Thá»‘ng ---
         var p1 = new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa truyền thống",
+            Name = "TrÃ  sá»¯a truyá»n thá»‘ng",
             Slug = "tra-sua-truyen-thong",
             ProductType = "DRINK",
-            Description = "Cốt hồng trà hảo hạng hòa quyện sữa tươi thanh trùng chuẩn vị nguyên bản.",
+            Description = "Cá»‘t há»“ng trÃ  háº£o háº¡ng hÃ²a quyá»‡n sá»¯a tÆ°Æ¡i thanh trÃ¹ng chuáº©n vá»‹ nguyÃªn báº£n.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -452,10 +532,10 @@ public static class DbInitializer
         var p2 = new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa trân châu đen",
+            Name = "TrÃ  sá»¯a trÃ¢n chÃ¢u Ä‘en",
             Slug = "tra-sua-tran-chau-den",
             ProductType = "DRINK",
-            Description = "Trà sữa truyền thống đậm vị kết hợp trân châu đen dai giòn sần sật nấu mật mía.",
+            Description = "TrÃ  sá»¯a truyá»n thá»‘ng Ä‘áº­m vá»‹ káº¿t há»£p trÃ¢n chÃ¢u Ä‘en dai giÃ²n sáº§n sáº­t náº¥u máº­t mÃ­a.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -467,10 +547,10 @@ public static class DbInitializer
         var p3 = new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa trân châu trắng",
+            Name = "TrÃ  sá»¯a trÃ¢n chÃ¢u tráº¯ng",
             Slug = "tra-sua-tran-chau-trang",
             ProductType = "DRINK",
-            Description = "Trà sữa thơm béo kèm trân châu 3Q trắng ngọc trai giòn tan thanh nhiệt.",
+            Description = "TrÃ  sá»¯a thÆ¡m bÃ©o kÃ¨m trÃ¢n chÃ¢u 3Q tráº¯ng ngá»c trai giÃ²n tan thanh nhiá»‡t.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -482,10 +562,10 @@ public static class DbInitializer
         var p4 = new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa trân châu hoàng kim",
+            Name = "TrÃ  sá»¯a trÃ¢n chÃ¢u hoÃ ng kim",
             Slug = "tra-sua-tran-chau-hoang-kim",
             ProductType = "DRINK",
-            Description = "Trân châu hoàng kim nấu đường nâu sánh óng, thơm dẻo đặc trưng của MilkyVerse.",
+            Description = "TrÃ¢n chÃ¢u hoÃ ng kim náº¥u Ä‘Æ°á»ng nÃ¢u sÃ¡nh Ã³ng, thÆ¡m dáº»o Ä‘áº·c trÆ°ng cá»§a MilkyVerse.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -497,10 +577,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa đường đen",
+            Name = "TrÃ  sá»¯a Ä‘Æ°á»ng Ä‘en",
             Slug = "tra-sua-duong-den",
             ProductType = "DRINK",
-            Description = "Vị ngọt dịu thơm nồng của mật mía đường đen cô đặc thủ công.",
+            Description = "Vá»‹ ngá»t dá»‹u thÆ¡m ná»“ng cá»§a máº­t mÃ­a Ä‘Æ°á»ng Ä‘en cÃ´ Ä‘áº·c thá»§ cÃ´ng.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -511,10 +591,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa trân châu đường đen",
+            Name = "TrÃ  sá»¯a trÃ¢n chÃ¢u Ä‘Æ°á»ng Ä‘en",
             Slug = "tra-sua-tran-chau-duong-den",
             ProductType = "DRINK",
-            Description = "Sự kết hợp kinh điển giữa sữa trà đậm đà và dòng trân châu đường đen nóng dẻo.",
+            Description = "Sá»± káº¿t há»£p kinh Ä‘iá»ƒn giá»¯a sá»¯a trÃ  Ä‘áº­m Ä‘Ã  vÃ  dÃ²ng trÃ¢n chÃ¢u Ä‘Æ°á»ng Ä‘en nÃ³ng dáº»o.",
             BasePrice = 50000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -525,10 +605,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa khoai môn",
+            Name = "TrÃ  sá»¯a khoai mÃ´n",
             Slug = "tra-sua-khoai-mon",
             ProductType = "DRINK",
-            Description = "Vị khoai môn bùi béo tự nhiên, màu tím pastel ngọt ngào quyến rũ.",
+            Description = "Vá»‹ khoai mÃ´n bÃ¹i bÃ©o tá»± nhiÃªn, mÃ u tÃ­m pastel ngá»t ngÃ o quyáº¿n rÅ©.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -539,10 +619,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa matcha",
+            Name = "TrÃ  sá»¯a matcha",
             Slug = "tra-sua-matcha",
             ProductType = "DRINK",
-            Description = "Bột trà xanh Uji Nhật Bản nguyên chất thơm thanh mát, cân bằng vị chát nhẹ.",
+            Description = "Bá»™t trÃ  xanh Uji Nháº­t Báº£n nguyÃªn cháº¥t thÆ¡m thanh mÃ¡t, cÃ¢n báº±ng vá»‹ chÃ¡t nháº¹.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -553,10 +633,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa socola",
+            Name = "TrÃ  sá»¯a socola",
             Slug = "tra-sua-socola",
             ProductType = "DRINK",
-            Description = "Socola đen nguyên chất đắng nhẹ hòa quyện cốt sữa ngọt ngào sánh mịn.",
+            Description = "Socola Ä‘en nguyÃªn cháº¥t Ä‘áº¯ng nháº¹ hÃ²a quyá»‡n cá»‘t sá»¯a ngá»t ngÃ o sÃ¡nh má»‹n.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -567,10 +647,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa cacao",
+            Name = "TrÃ  sá»¯a cacao",
             Slug = "tra-sua-cacao",
             ProductType = "DRINK",
-            Description = "Cacao Bến Tre nguyên chất thơm lừng nồng nàn, đậm đà vị truyền thống.",
+            Description = "Cacao Báº¿n Tre nguyÃªn cháº¥t thÆ¡m lá»«ng ná»“ng nÃ n, Ä‘áº­m Ä‘Ã  vá»‹ truyá»n thá»‘ng.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -581,10 +661,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa dâu",
+            Name = "TrÃ  sá»¯a dÃ¢u",
             Slug = "tra-sua-dau",
             ProductType = "DRINK",
-            Description = "Hương dâu tây Đà Lạt tươi mới hòa tan trong cốt trà sữa thơm mát.",
+            Description = "HÆ°Æ¡ng dÃ¢u tÃ¢y ÄÃ  Láº¡t tÆ°Æ¡i má»›i hÃ²a tan trong cá»‘t trÃ  sá»¯a thÆ¡m mÃ¡t.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -595,10 +675,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa caramel",
+            Name = "TrÃ  sá»¯a caramel",
             Slug = "tra-sua-caramel",
             ProductType = "DRINK",
-            Description = "Sốt caramel nấu thủ công thơm ngậy mùi bơ đường cháy cuốn hút.",
+            Description = "Sá»‘t caramel náº¥u thá»§ cÃ´ng thÆ¡m ngáº­y mÃ¹i bÆ¡ Ä‘Æ°á»ng chÃ¡y cuá»‘n hÃºt.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -609,10 +689,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa bạc hà",
+            Name = "TrÃ  sá»¯a báº¡c hÃ ",
             Slug = "tra-sua-bac-ha",
             ProductType = "DRINK",
-            Description = "Vị the mát sảng khoái của lá bạc hà bừng tỉnh mọi giác quan.",
+            Description = "Vá»‹ the mÃ¡t sáº£ng khoÃ¡i cá»§a lÃ¡ báº¡c hÃ  bá»«ng tá»‰nh má»i giÃ¡c quan.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -623,10 +703,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa hạnh nhân",
+            Name = "TrÃ  sá»¯a háº¡nh nhÃ¢n",
             Slug = "tra-sua-hanh-nhan",
             ProductType = "DRINK",
-            Description = "Hạnh nhân nướng thơm bùi đặc trưng phong cách phương Tây.",
+            Description = "Háº¡nh nhÃ¢n nÆ°á»›ng thÆ¡m bÃ¹i Ä‘áº·c trÆ°ng phong cÃ¡ch phÆ°Æ¡ng TÃ¢y.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -637,10 +717,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa Thái xanh",
+            Name = "TrÃ  sá»¯a ThÃ¡i xanh",
             Slug = "tra-sua-thai-xanh",
             ProductType = "DRINK",
-            Description = "Lá trà Thái xanh thơm mát, màu xanh ngọc bích bắt mắt giải nhiệt sảng khoái.",
+            Description = "LÃ¡ trÃ  ThÃ¡i xanh thÆ¡m mÃ¡t, mÃ u xanh ngá»c bÃ­ch báº¯t máº¯t giáº£i nhiá»‡t sáº£ng khoÃ¡i.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -651,10 +731,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa Thái đỏ",
+            Name = "TrÃ  sá»¯a ThÃ¡i Ä‘á»",
             Slug = "tra-sua-thai-do",
             ProductType = "DRINK",
-            Description = "Trà Thái đỏ truyền thống thơm nồng thảo mộc, vị ngọt béo đậm sâu.",
+            Description = "TrÃ  ThÃ¡i Ä‘á» truyá»n thá»‘ng thÆ¡m ná»“ng tháº£o má»™c, vá»‹ ngá»t bÃ©o Ä‘áº­m sÃ¢u.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -665,10 +745,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa Oreo",
+            Name = "TrÃ  sá»¯a Oreo",
             Slug = "tra-sua-oreo",
             ProductType = "DRINK",
-            Description = "Trà sữa béo ngậy rắc vụn bánh quy Oreo giòn rụm thơm ngon khó cưỡng.",
+            Description = "TrÃ  sá»¯a bÃ©o ngáº­y ráº¯c vá»¥n bÃ¡nh quy Oreo giÃ²n rá»¥m thÆ¡m ngon khÃ³ cÆ°á»¡ng.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -679,10 +759,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa tiramisu",
+            Name = "TrÃ  sá»¯a tiramisu",
             Slug = "tra-sua-tiramisu",
             ProductType = "DRINK",
-            Description = "Hương vị bánh Tiramisu trứ danh nước Ý hòa quyện lớp kem mascarpone béo ngậy.",
+            Description = "HÆ°Æ¡ng vá»‹ bÃ¡nh Tiramisu trá»© danh nÆ°á»›c Ã hÃ²a quyá»‡n lá»›p kem mascarpone bÃ©o ngáº­y.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -693,10 +773,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa kem cheese",
+            Name = "TrÃ  sá»¯a kem cheese",
             Slug = "tra-sua-kem-cheese",
             ProductType = "DRINK",
-            Description = "Lớp cheese foam bồng bềnh béo mặn phủ trên nền trà sữa truyền thống.",
+            Description = "Lá»›p cheese foam bá»“ng bá»nh bÃ©o máº·n phá»§ trÃªn ná»n trÃ  sá»¯a truyá»n thá»‘ng.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -707,10 +787,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa kem trứng",
+            Name = "TrÃ  sá»¯a kem trá»©ng",
             Slug = "tra-sua-kem-trung",
             ProductType = "DRINK",
-            Description = "Kem trứng vàng óng nướng khò mặt thơm lừng béo ngậy ngọt ngào.",
+            Description = "Kem trá»©ng vÃ ng Ã³ng nÆ°á»›ng khÃ² máº·t thÆ¡m lá»«ng bÃ©o ngáº­y ngá»t ngÃ o.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -721,10 +801,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa kem muối",
+            Name = "TrÃ  sá»¯a kem muá»‘i",
             Slug = "tra-sua-kem-muoi",
             ProductType = "DRINK",
-            Description = "Lớp kem muối biển sánh mịn đậm vị mặn ngọt hài hòa độc đáo.",
+            Description = "Lá»›p kem muá»‘i biá»ƒn sÃ¡nh má»‹n Ä‘áº­m vá»‹ máº·n ngá»t hÃ i hÃ²a Ä‘á»™c Ä‘Ã¡o.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -735,10 +815,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa pudding",
+            Name = "TrÃ  sá»¯a pudding",
             Slug = "tra-sua-pudding",
             ProductType = "DRINK",
-            Description = "Pudding trứng tươi mềm mịn tan ngay đầu lưỡi kết hợp trà sữa êm dịu.",
+            Description = "Pudding trá»©ng tÆ°Æ¡i má»m má»‹n tan ngay Ä‘áº§u lÆ°á»¡i káº¿t há»£p trÃ  sá»¯a Ãªm dá»‹u.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -749,10 +829,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa flan",
+            Name = "TrÃ  sá»¯a flan",
             Slug = "tra-sua-flan",
             ProductType = "DRINK",
-            Description = "Bánh flan caramen béo ngậy mềm mượt nguyên chiếc thả trong ly trà sữa.",
+            Description = "BÃ¡nh flan caramen bÃ©o ngáº­y má»m mÆ°á»£t nguyÃªn chiáº¿c tháº£ trong ly trÃ  sá»¯a.",
             BasePrice = 50000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -763,10 +843,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa thạch trái cây",
+            Name = "TrÃ  sá»¯a tháº¡ch trÃ¡i cÃ¢y",
             Slug = "tra-sua-thach-trai-cay",
             ProductType = "DRINK",
-            Description = "Thạch trái cây cầu vồng giòn dai thanh mát giải nhiệt mùa hè.",
+            Description = "Tháº¡ch trÃ¡i cÃ¢y cáº§u vá»“ng giÃ²n dai thanh mÃ¡t giáº£i nhiá»‡t mÃ¹a hÃ¨.",
             BasePrice = 46000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -777,10 +857,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catClassic.Id,
-            Name = "Trà sữa nhiều topping",
+            Name = "TrÃ  sá»¯a nhiá»u topping",
             Slug = "tra-sua-nhieu-topping",
             ProductType = "DRINK",
-            Description = "Bữa tiệc topping thịnh soạn: trân châu đen, thạch 3Q, pudding trứng và sương sáo.",
+            Description = "Bá»¯a tiá»‡c topping thá»‹nh soáº¡n: trÃ¢n chÃ¢u Ä‘en, tháº¡ch 3Q, pudding trá»©ng vÃ  sÆ°Æ¡ng sÃ¡o.",
             BasePrice = 58000,
             ImageUrl = "https://images.unsplash.com/photo-1558857563-b37cf5311487?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -788,14 +868,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.2 Trà Trái Cây ---
+        // --- 5.1.2 TrÃ  TrÃ¡i CÃ¢y ---
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà đào cam sả",
+            Name = "TrÃ  Ä‘Ã o cam sáº£",
             Slug = "tra-dao-cam-sa",
             ProductType = "DRINK",
-            Description = "Thức uống quốc dân: Đào miếng giòn rụm, cam vàng mọng nước và hương sả ấm nồng.",
+            Description = "Thá»©c uá»‘ng quá»‘c dÃ¢n: ÄÃ o miáº¿ng giÃ²n rá»¥m, cam vÃ ng má»ng nÆ°á»›c vÃ  hÆ°Æ¡ng sáº£ áº¥m ná»“ng.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -806,10 +886,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà vải",
+            Name = "TrÃ  váº£i",
             Slug = "tra-vai",
             ProductType = "DRINK",
-            Description = "Hương vải thiều ngọt ngào thanh khiết kết hợp nền lục trà lài thanh tao.",
+            Description = "HÆ°Æ¡ng váº£i thiá»u ngá»t ngÃ o thanh khiáº¿t káº¿t há»£p ná»n lá»¥c trÃ  lÃ i thanh tao.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -820,10 +900,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà chanh dây",
+            Name = "TrÃ  chanh dÃ¢y",
             Slug = "tra-chanh-day",
             ProductType = "DRINK",
-            Description = "Vị chua ngọt thanh thoát của chanh dây tươi nguyên hạt bừng tỉnh năng lượng.",
+            Description = "Vá»‹ chua ngá»t thanh thoÃ¡t cá»§a chanh dÃ¢y tÆ°Æ¡i nguyÃªn háº¡t bá»«ng tá»‰nh nÄƒng lÆ°á»£ng.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -834,10 +914,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà dâu tây",
+            Name = "TrÃ  dÃ¢u tÃ¢y",
             Slug = "tra-dau-tay",
             ProductType = "DRINK",
-            Description = "Dâu tây tươi ngào đường thơm phức, màu đỏ hồng rực rỡ bắt mắt.",
+            Description = "DÃ¢u tÃ¢y tÆ°Æ¡i ngÃ o Ä‘Æ°á»ng thÆ¡m phá»©c, mÃ u Ä‘á» há»“ng rá»±c rá»¡ báº¯t máº¯t.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -848,10 +928,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà xoài",
+            Name = "TrÃ  xoÃ i",
             Slug = "tra-xoai",
             ProductType = "DRINK",
-            Description = "Xoài cát chín mọng ngọt thơm nhiệt đới hòa cùng trà xanh thanh mát.",
+            Description = "XoÃ i cÃ¡t chÃ­n má»ng ngá»t thÆ¡m nhiá»‡t Ä‘á»›i hÃ²a cÃ¹ng trÃ  xanh thanh mÃ¡t.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -862,10 +942,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà tắc",
+            Name = "TrÃ  táº¯c",
             Slug = "tra-tac",
             ProductType = "DRINK",
-            Description = "Trà tắc truyền thống chua chua ngọt ngọt, giải khát tức thì ngày nắng nóng.",
+            Description = "TrÃ  táº¯c truyá»n thá»‘ng chua chua ngá»t ngá»t, giáº£i khÃ¡t tá»©c thÃ¬ ngÃ y náº¯ng nÃ³ng.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -876,10 +956,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà cam chanh",
+            Name = "TrÃ  cam chanh",
             Slug = "tra-cam-chanh",
             ProductType = "DRINK",
-            Description = "Sự kết hợp vitamin C dồi dào từ cam vàng và chanh tươi mát lành.",
+            Description = "Sá»± káº¿t há»£p vitamin C dá»“i dÃ o tá»« cam vÃ ng vÃ  chanh tÆ°Æ¡i mÃ¡t lÃ nh.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -890,10 +970,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà dưa hấu",
+            Name = "TrÃ  dÆ°a háº¥u",
             Slug = "tra-dua-hau",
             ProductType = "DRINK",
-            Description = "Nước ép dưa hấu đỏ mọng ngọt mát tự nhiên pha trên nền lục trà.",
+            Description = "NÆ°á»›c Ã©p dÆ°a háº¥u Ä‘á» má»ng ngá»t mÃ¡t tá»± nhiÃªn pha trÃªn ná»n lá»¥c trÃ .",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -904,10 +984,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà ổi hồng",
+            Name = "TrÃ  á»•i há»“ng",
             Slug = "tra-oi-hong",
             ProductType = "DRINK",
-            Description = "Ổi hồng xá lị thơm lừng hương hoa, vị ngọt thanh lưu luyến khó quên.",
+            Description = "á»”i há»“ng xÃ¡ lá»‹ thÆ¡m lá»«ng hÆ°Æ¡ng hoa, vá»‹ ngá»t thanh lÆ°u luyáº¿n khÃ³ quÃªn.",
             BasePrice = 46000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -918,10 +998,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà dứa",
+            Name = "TrÃ  dá»©a",
             Slug = "tra-dua",
             ProductType = "DRINK",
-            Description = "Dứa nhiệt đới thơm ngọt dịu kết hợp trà xanh mát rượi sảng khoái.",
+            Description = "Dá»©a nhiá»‡t Ä‘á»›i thÆ¡m ngá»t dá»‹u káº¿t há»£p trÃ  xanh mÃ¡t rÆ°á»£i sáº£ng khoÃ¡i.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -932,10 +1012,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà kiwi",
+            Name = "TrÃ  kiwi",
             Slug = "tra-kiwi",
             ProductType = "DRINK",
-            Description = "Kiwi xanh nhập khẩu mọng nước, vị chua thanh giàu dưỡng chất và chất xơ.",
+            Description = "Kiwi xanh nháº­p kháº©u má»ng nÆ°á»›c, vá»‹ chua thanh giÃ u dÆ°á»¡ng cháº¥t vÃ  cháº¥t xÆ¡.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -946,10 +1026,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà táo xanh",
+            Name = "TrÃ  tÃ¡o xanh",
             Slug = "tra-tao-xanh",
             ProductType = "DRINK",
-            Description = "Táo xanh giòn ngọt thanh tao, hương vị dịu nhẹ êm ái.",
+            Description = "TÃ¡o xanh giÃ²n ngá»t thanh tao, hÆ°Æ¡ng vá»‹ dá»‹u nháº¹ Ãªm Ã¡i.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -960,10 +1040,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà nho",
+            Name = "TrÃ  nho",
             Slug = "tra-nho",
             ProductType = "DRINK",
-            Description = "Nho tím mọng nước, vị ngọt dịu và màu sắc bắt mắt thanh lịch.",
+            Description = "Nho tÃ­m má»ng nÆ°á»›c, vá»‹ ngá»t dá»‹u vÃ  mÃ u sáº¯c báº¯t máº¯t thanh lá»‹ch.",
             BasePrice = 46000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -974,10 +1054,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà dâu tằm",
+            Name = "TrÃ  dÃ¢u táº±m",
             Slug = "tra-dau-tam",
             ProductType = "DRINK",
-            Description = "Dâu tằm Đà Lạt chua ngọt đậm đà, giàu chất chống oxy hóa tự nhiên.",
+            Description = "DÃ¢u táº±m ÄÃ  Láº¡t chua ngá»t Ä‘áº­m Ä‘Ã , giÃ u cháº¥t chá»‘ng oxy hÃ³a tá»± nhiÃªn.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -988,10 +1068,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà chanh mật ong",
+            Name = "TrÃ  chanh máº­t ong",
             Slug = "tra-chanh-mat-ong-trai-cay",
             ProductType = "DRINK",
-            Description = "Mật ong hoa rừng nguyên chất kết hợp nước cốt chanh tươi ấm áp dịu cổ họng.",
+            Description = "Máº­t ong hoa rá»«ng nguyÃªn cháº¥t káº¿t há»£p nÆ°á»›c cá»‘t chanh tÆ°Æ¡i áº¥m Ã¡p dá»‹u cá»• há»ng.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1002,10 +1082,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà chanh dây cam",
+            Name = "TrÃ  chanh dÃ¢y cam",
             Slug = "tra-chanh-day-cam",
             ProductType = "DRINK",
-            Description = "Bản hòa tấu cam vàng tươi và chanh dây chua ngọt tươi mát.",
+            Description = "Báº£n hÃ²a táº¥u cam vÃ ng tÆ°Æ¡i vÃ  chanh dÃ¢y chua ngá»t tÆ°Æ¡i mÃ¡t.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1016,10 +1096,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà nhiệt đới thập cẩm",
+            Name = "TrÃ  nhiá»‡t Ä‘á»›i tháº­p cáº©m",
             Slug = "tra-nhiet-doi-thap-cam",
             ProductType = "DRINK",
-            Description = "Ngập tràn các lát trái cây tươi: cam, dưa hấu, táo, dâu tây và chanh dây.",
+            Description = "Ngáº­p trÃ n cÃ¡c lÃ¡t trÃ¡i cÃ¢y tÆ°Æ¡i: cam, dÆ°a háº¥u, tÃ¡o, dÃ¢u tÃ¢y vÃ  chanh dÃ¢y.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1030,10 +1110,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà trái cây nhiệt đới",
+            Name = "TrÃ  trÃ¡i cÃ¢y nhiá»‡t Ä‘á»›i",
             Slug = "tra-trai-cay-nhiet-doi",
             ProductType = "DRINK",
-            Description = "Trái cây tuyển chọn tươi mới mỗi ngày trên nền trà ô long thanh nhã.",
+            Description = "TrÃ¡i cÃ¢y tuyá»ƒn chá»n tÆ°Æ¡i má»›i má»—i ngÃ y trÃªn ná»n trÃ  Ã´ long thanh nhÃ£.",
             BasePrice = 50000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1044,10 +1124,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà mãng cầu",
+            Name = "TrÃ  mÃ£ng cáº§u",
             Slug = "tra-mang-cau",
             ProductType = "DRINK",
-            Description = "Mãng cầu xiêm chua ngọt dẻo thơm, món hot trend tươi mát khó chối từ.",
+            Description = "MÃ£ng cáº§u xiÃªm chua ngá»t dáº»o thÆ¡m, mÃ³n hot trend tÆ°Æ¡i mÃ¡t khÃ³ chá»‘i tá»«.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1058,10 +1138,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà mận",
+            Name = "TrÃ  máº­n",
             Slug = "tra-man",
             ProductType = "DRINK",
-            Description = "Mận Hậu ngâm chua ngọt đậm đà phong vị núi rừng Tây Bắc.",
+            Description = "Máº­n Háº­u ngÃ¢m chua ngá»t Ä‘áº­m Ä‘Ã  phong vá»‹ nÃºi rá»«ng TÃ¢y Báº¯c.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1072,10 +1152,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruit.Id,
-            Name = "Trà dưa lưới",
+            Name = "TrÃ  dÆ°a lÆ°á»›i",
             Slug = "tra-dua-luoi",
             ProductType = "DRINK",
-            Description = "Dưa lưới hoàng kim thơm dịu, ngọt lành thanh mát giải nhiệt ngày hè.",
+            Description = "DÆ°a lÆ°á»›i hoÃ ng kim thÆ¡m dá»‹u, ngá»t lÃ nh thanh mÃ¡t giáº£i nhiá»‡t ngÃ y hÃ¨.",
             BasePrice = 46000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1083,14 +1163,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.3 Trà Nguyên Chất & Trà Pha Vị ---
+        // --- 5.1.3 TrÃ  NguyÃªn Cháº¥t & TrÃ  Pha Vá»‹ ---
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà xanh",
+            Name = "TrÃ  xanh",
             Slug = "tra-xanh-nguyen-chat",
             ProductType = "DRINK",
-            Description = "Lục trà thái nguyên xanh trong thanh khiết, tiền chát dịu hậu ngọt sâu.",
+            Description = "Lá»¥c trÃ  thÃ¡i nguyÃªn xanh trong thanh khiáº¿t, tiá»n chÃ¡t dá»‹u háº­u ngá»t sÃ¢u.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1101,10 +1181,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà đen",
+            Name = "TrÃ  Ä‘en",
             Slug = "tra-den-nguyen-chat",
             ProductType = "DRINK",
-            Description = "Hồng trà ủ men toàn phần màu hổ phách đậm đà hương hoa cỏ khô.",
+            Description = "Há»“ng trÃ  á»§ men toÃ n pháº§n mÃ u há»• phÃ¡ch Ä‘áº­m Ä‘Ã  hÆ°Æ¡ng hoa cá» khÃ´.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1115,10 +1195,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà ô long",
+            Name = "TrÃ  Ã´ long",
             Slug = "tra-o-long-nguyen-chat",
             ProductType = "DRINK",
-            Description = "Trà ô long cao nguyên thơm hương hoa mộc, vị trà đằm thắm tao nhã.",
+            Description = "TrÃ  Ã´ long cao nguyÃªn thÆ¡m hÆ°Æ¡ng hoa má»™c, vá»‹ trÃ  Ä‘áº±m tháº¯m tao nhÃ£.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1129,10 +1209,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà lài",
+            Name = "TrÃ  lÃ i",
             Slug = "tra-lai-nguyen-chat",
             ProductType = "DRINK",
-            Description = "Lục trà ướp hoa nhài tự nhiên thơm ngát thanh tao thư giãn tinh thần.",
+            Description = "Lá»¥c trÃ  Æ°á»›p hoa nhÃ i tá»± nhiÃªn thÆ¡m ngÃ¡t thanh tao thÆ° giÃ£n tinh tháº§n.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1143,10 +1223,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Hồng trà",
+            Name = "Há»“ng trÃ ",
             Slug = "hong-tra-nguyen-chat",
             ProductType = "DRINK",
-            Description = "Cốt hồng trà nguyên bản đậm vị thích hợp thưởng thức mộc hoặc thêm đá.",
+            Description = "Cá»‘t há»“ng trÃ  nguyÃªn báº£n Ä‘áº­m vá»‹ thÃ­ch há»£p thÆ°á»Ÿng thá»©c má»™c hoáº·c thÃªm Ä‘Ã¡.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1157,10 +1237,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Lục trà",
+            Name = "Lá»¥c trÃ ",
             Slug = "luc-tra-nguyen-chat",
             ProductType = "DRINK",
-            Description = "Lục trà non thơm hương cốm, vị thanh mát dễ chịu.",
+            Description = "Lá»¥c trÃ  non thÆ¡m hÆ°Æ¡ng cá»‘m, vá»‹ thanh mÃ¡t dá»… chá»‹u.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1171,10 +1251,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà nhài mật ong",
+            Name = "TrÃ  nhÃ i máº­t ong",
             Slug = "tra-nhai-mat-ong",
             ProductType = "DRINK",
-            Description = "Hương hoa lài quyện mật ong rừng ngọt thanh tao nhã.",
+            Description = "HÆ°Æ¡ng hoa lÃ i quyá»‡n máº­t ong rá»«ng ngá»t thanh tao nhÃ£.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1185,10 +1265,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà chanh",
+            Name = "TrÃ  chanh",
             Slug = "tra-chanh-pho-co",
             ProductType = "DRINK",
-            Description = "Trà chanh phố cổ truyền thống đậm đà chua ngọt giải khát dân dã.",
+            Description = "TrÃ  chanh phá»‘ cá»• truyá»n thá»‘ng Ä‘áº­m Ä‘Ã  chua ngá»t giáº£i khÃ¡t dÃ¢n dÃ£.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1199,10 +1279,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà chanh mật ong",
+            Name = "TrÃ  chanh máº­t ong",
             Slug = "tra-chanh-mat-ong-pha-vi",
             ProductType = "DRINK",
-            Description = "Nước cốt chanh tươi hòa mật ong hoa cà phê thanh khiết.",
+            Description = "NÆ°á»›c cá»‘t chanh tÆ°Æ¡i hÃ²a máº­t ong hoa cÃ  phÃª thanh khiáº¿t.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1213,10 +1293,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà gừng mật ong",
+            Name = "TrÃ  gá»«ng máº­t ong",
             Slug = "tra-gung-mat-ong",
             ProductType = "DRINK",
-            Description = "Gừng tươi đập dập thơm cay ấm nồng kết hợp mật ong tốt cho sức khỏe.",
+            Description = "Gá»«ng tÆ°Æ¡i Ä‘áº­p dáº­p thÆ¡m cay áº¥m ná»“ng káº¿t há»£p máº­t ong tá»‘t cho sá»©c khá»e.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1227,10 +1307,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà quất mật ong",
+            Name = "TrÃ  quáº¥t máº­t ong",
             Slug = "tra-quat-mat-ong",
             ProductType = "DRINK",
-            Description = "Quất tươi mọng nước thơm tinh dầu hòa cùng mật ong dịu dàng.",
+            Description = "Quáº¥t tÆ°Æ¡i má»ng nÆ°á»›c thÆ¡m tinh dáº§u hÃ²a cÃ¹ng máº­t ong dá»‹u dÃ ng.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1241,10 +1321,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà vải lài",
+            Name = "TrÃ  váº£i lÃ i",
             Slug = "tra-vai-lai",
             ProductType = "DRINK",
-            Description = "Lục trà lài êm dịu kết hợp hương vải thiều ngọt ngào thanh lịch.",
+            Description = "Lá»¥c trÃ  lÃ i Ãªm dá»‹u káº¿t há»£p hÆ°Æ¡ng váº£i thiá»u ngá»t ngÃ o thanh lá»‹ch.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1255,10 +1335,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà ô long đào",
+            Name = "TrÃ  Ã´ long Ä‘Ã o",
             Slug = "tra-o-long-dao",
             ProductType = "DRINK",
-            Description = "Trà ô long nướng thơm hương kết hợp đào tươi mọng nước.",
+            Description = "TrÃ  Ã´ long nÆ°á»›ng thÆ¡m hÆ°Æ¡ng káº¿t há»£p Ä‘Ã o tÆ°Æ¡i má»ng nÆ°á»›c.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1269,10 +1349,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà ô long dâu",
+            Name = "TrÃ  Ã´ long dÃ¢u",
             Slug = "tra-o-long-dau",
             ProductType = "DRINK",
-            Description = "Sự gặp gỡ giữa trà ô long đằm thắm và dâu tây ngọt ngào.",
+            Description = "Sá»± gáº·p gá»¡ giá»¯a trÃ  Ã´ long Ä‘áº±m tháº¯m vÃ  dÃ¢u tÃ¢y ngá»t ngÃ o.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1283,10 +1363,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà xanh cam",
+            Name = "TrÃ  xanh cam",
             Slug = "tra-xanh-cam",
             ProductType = "DRINK",
-            Description = "Lục trà thanh mát phối tép cam sành tươi nguyên chất.",
+            Description = "Lá»¥c trÃ  thanh mÃ¡t phá»‘i tÃ©p cam sÃ nh tÆ°Æ¡i nguyÃªn cháº¥t.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1297,10 +1377,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà lài tắc",
+            Name = "TrÃ  lÃ i táº¯c",
             Slug = "tra-lai-tac",
             ProductType = "DRINK",
-            Description = "Hương thơm hoa lài điểm xuyết vị chua thanh sảng khoái của tắc tươi.",
+            Description = "HÆ°Æ¡ng thÆ¡m hoa lÃ i Ä‘iá»ƒm xuyáº¿t vá»‹ chua thanh sáº£ng khoÃ¡i cá»§a táº¯c tÆ°Æ¡i.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1311,10 +1391,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catPureTea.Id,
-            Name = "Trà atiso đỏ",
+            Name = "TrÃ  atiso Ä‘á»",
             Slug = "tra-atiso-do",
             ProductType = "DRINK",
-            Description = "Trà hoa Hibiscus màu đỏ ruby rực rỡ, vị chua thanh tự nhiên đẹp da.",
+            Description = "TrÃ  hoa Hibiscus mÃ u Ä‘á» ruby rá»±c rá»¡, vá»‹ chua thanh tá»± nhiÃªn Ä‘áº¹p da.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1322,14 +1402,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.4 Trà Macchiato & Kem Cheese ---
+        // --- 5.1.4 TrÃ  Macchiato & Kem Cheese ---
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà xanh macchiato",
+            Name = "TrÃ  xanh macchiato",
             Slug = "tra-xanh-macchiato",
             ProductType = "DRINK",
-            Description = "Lục trà thanh mát phủ lớp kem macchiato trắng muốt sánh mịn như tuyết.",
+            Description = "Lá»¥c trÃ  thanh mÃ¡t phá»§ lá»›p kem macchiato tráº¯ng muá»‘t sÃ¡nh má»‹n nhÆ° tuyáº¿t.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1340,10 +1420,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà ô long kem cheese",
+            Name = "TrÃ  Ã´ long kem cheese",
             Slug = "tra-o-long-kem-cheese",
             ProductType = "DRINK",
-            Description = "Trà ô long thơm đậm vị khói kết hợp cheese foam phô mai béo mặn tuyệt đỉnh.",
+            Description = "TrÃ  Ã´ long thÆ¡m Ä‘áº­m vá»‹ khÃ³i káº¿t há»£p cheese foam phÃ´ mai bÃ©o máº·n tuyá»‡t Ä‘á»‰nh.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1354,10 +1434,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Hồng trà kem muối",
+            Name = "Há»“ng trÃ  kem muá»‘i",
             Slug = "hong-tra-kem-muoi",
             ProductType = "DRINK",
-            Description = "Hồng trà Ceylon đậm đà nâng niu bởi lớp bọt kem muối biển mặn mà quyến rũ.",
+            Description = "Há»“ng trÃ  Ceylon Ä‘áº­m Ä‘Ã  nÃ¢ng niu bá»Ÿi lá»›p bá»t kem muá»‘i biá»ƒn máº·n mÃ  quyáº¿n rÅ©.",
             BasePrice = 50000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1368,10 +1448,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà lài kem cheese",
+            Name = "TrÃ  lÃ i kem cheese",
             Slug = "tra-lai-kem-cheese",
             ProductType = "DRINK",
-            Description = "Hoa lài thơm ngát dịu dàng hòa trong lớp kem phô mai béo ngậy mượt mà.",
+            Description = "Hoa lÃ i thÆ¡m ngÃ¡t dá»‹u dÃ ng hÃ²a trong lá»›p kem phÃ´ mai bÃ©o ngáº­y mÆ°á»£t mÃ .",
             BasePrice = 50000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1382,10 +1462,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà đào kem cheese",
+            Name = "TrÃ  Ä‘Ã o kem cheese",
             Slug = "tra-dao-kem-cheese",
             ProductType = "DRINK",
-            Description = "Hương đào ngọt thơm thanh thoát kết hợp kem phô mai thơm ngậy ngất ngây.",
+            Description = "HÆ°Æ¡ng Ä‘Ã o ngá»t thÆ¡m thanh thoÃ¡t káº¿t há»£p kem phÃ´ mai thÆ¡m ngáº­y ngáº¥t ngÃ¢y.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1396,10 +1476,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà dâu kem cheese",
+            Name = "TrÃ  dÃ¢u kem cheese",
             Slug = "tra-dau-kem-cheese",
             ProductType = "DRINK",
-            Description = "Vị chua ngọt của dâu tây đỏ mọng hòa quyện lớp kem béo mặn đỉnh cao.",
+            Description = "Vá»‹ chua ngá»t cá»§a dÃ¢u tÃ¢y Ä‘á» má»ng hÃ²a quyá»‡n lá»›p kem bÃ©o máº·n Ä‘á»‰nh cao.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1410,10 +1490,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà xoài kem cheese",
+            Name = "TrÃ  xoÃ i kem cheese",
             Slug = "tra-xoai-kem-cheese",
             ProductType = "DRINK",
-            Description = "Xoài chín vàng ươm nhiệt đới cùng kem cheese béo mặn bồng bềnh.",
+            Description = "XoÃ i chÃ­n vÃ ng Æ°Æ¡m nhiá»‡t Ä‘á»›i cÃ¹ng kem cheese bÃ©o máº·n bá»“ng bá»nh.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1424,10 +1504,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà sữa macchiato",
+            Name = "TrÃ  sá»¯a macchiato",
             Slug = "tra-sua-macchiato",
             ProductType = "DRINK",
-            Description = "Trà sữa truyền thống nhân đôi độ béo ngậy với lớp kem macchiato đặc chế.",
+            Description = "TrÃ  sá»¯a truyá»n thá»‘ng nhÃ¢n Ä‘Ã´i Ä‘á»™ bÃ©o ngáº­y vá»›i lá»›p kem macchiato Ä‘áº·c cháº¿.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1438,10 +1518,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà đen kem trứng",
+            Name = "TrÃ  Ä‘en kem trá»©ng",
             Slug = "tra-den-kem-trung",
             ProductType = "DRINK",
-            Description = "Nền trà đen đậm vị nâng đỡ lớp kem trứng vàng nướng cháy thơm phức.",
+            Description = "Ná»n trÃ  Ä‘en Ä‘áº­m vá»‹ nÃ¢ng Ä‘á»¡ lá»›p kem trá»©ng vÃ ng nÆ°á»›ng chÃ¡y thÆ¡m phá»©c.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1452,10 +1532,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCheese.Id,
-            Name = "Trà ô long kem muối",
+            Name = "TrÃ  Ã´ long kem muá»‘i",
             Slug = "tra-o-long-kem-muoi",
             ProductType = "DRINK",
-            Description = "Ô long cao nguyên thượng hạng hòa quyện kem muối biển tinh khiết.",
+            Description = "Ã” long cao nguyÃªn thÆ°á»£ng háº¡ng hÃ²a quyá»‡n kem muá»‘i biá»ƒn tinh khiáº¿t.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1463,14 +1543,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.5 Sữa Tươi & Đồ Uống Sữa ---
+        // --- 5.1.5 Sá»¯a TÆ°Æ¡i & Äá»“ Uá»‘ng Sá»¯a ---
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi trân châu đường đen",
+            Name = "Sá»¯a tÆ°Æ¡i trÃ¢n chÃ¢u Ä‘Æ°á»ng Ä‘en",
             Slug = "sua-tuoi-tran-chau-duong-den",
             ProductType = "DRINK",
-            Description = "Món 'hot trend' vượt thời gian: Sữa tươi thanh trùng lạnh cùng trân châu đường đen dẻo nóng.",
+            Description = "MÃ³n 'hot trend' vÆ°á»£t thá»i gian: Sá»¯a tÆ°Æ¡i thanh trÃ¹ng láº¡nh cÃ¹ng trÃ¢n chÃ¢u Ä‘Æ°á»ng Ä‘en dáº»o nÃ³ng.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1481,10 +1561,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi đường nâu",
+            Name = "Sá»¯a tÆ°Æ¡i Ä‘Æ°á»ng nÃ¢u",
             Slug = "sua-tuoi-duong-nau",
             ProductType = "DRINK",
-            Description = "Vân đường nâu hổ phách quệt thành ly ôm lấy dòng sữa tươi thanh mát béo ngậy.",
+            Description = "VÃ¢n Ä‘Æ°á»ng nÃ¢u há»• phÃ¡ch quá»‡t thÃ nh ly Ã´m láº¥y dÃ²ng sá»¯a tÆ°Æ¡i thanh mÃ¡t bÃ©o ngáº­y.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1495,10 +1575,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi matcha",
+            Name = "Sá»¯a tÆ°Æ¡i matcha",
             Slug = "sua-tuoi-matcha",
             ProductType = "DRINK",
-            Description = "Matcha Uji xanh mướt phân tầng hoàn hảo trên nền sữa tươi trắng ngần.",
+            Description = "Matcha Uji xanh mÆ°á»›t phÃ¢n táº§ng hoÃ n háº£o trÃªn ná»n sá»¯a tÆ°Æ¡i tráº¯ng ngáº§n.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1509,10 +1589,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi socola",
+            Name = "Sá»¯a tÆ°Æ¡i socola",
             Slug = "sua-tuoi-socola",
             ProductType = "DRINK",
-            Description = "Sốt socola đen sánh đậm hòa vào sữa tươi béo thơm ngọt lịm tim.",
+            Description = "Sá»‘t socola Ä‘en sÃ¡nh Ä‘áº­m hÃ²a vÃ o sá»¯a tÆ°Æ¡i bÃ©o thÆ¡m ngá»t lá»‹m tim.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1523,10 +1603,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi dâu",
+            Name = "Sá»¯a tÆ°Æ¡i dÃ¢u",
             Slug = "sua-tuoi-dau",
             ProductType = "DRINK",
-            Description = "Mứt dâu tây tươi ngào đường sánh mịn kết hợp sữa tươi thanh trùng.",
+            Description = "Má»©t dÃ¢u tÃ¢y tÆ°Æ¡i ngÃ o Ä‘Æ°á»ng sÃ¡nh má»‹n káº¿t há»£p sá»¯a tÆ°Æ¡i thanh trÃ¹ng.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1537,10 +1617,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi khoai môn",
+            Name = "Sá»¯a tÆ°Æ¡i khoai mÃ´n",
             Slug = "sua-tuoi-khoai-mon",
             ProductType = "DRINK",
-            Description = "Khoai môn nghiền dẻo bùi béo tự nhiên hòa trong dòng sữa thơm ngon.",
+            Description = "Khoai mÃ´n nghiá»n dáº»o bÃ¹i bÃ©o tá»± nhiÃªn hÃ²a trong dÃ²ng sá»¯a thÆ¡m ngon.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1551,10 +1631,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi kem cheese",
+            Name = "Sá»¯a tÆ°Æ¡i kem cheese",
             Slug = "sua-tuoi-kem-cheese",
             ProductType = "DRINK",
-            Description = "Sữa tươi mát lạnh phủ lớp kem phô mai béo mặn sánh mịn bồng bềnh.",
+            Description = "Sá»¯a tÆ°Æ¡i mÃ¡t láº¡nh phá»§ lá»›p kem phÃ´ mai bÃ©o máº·n sÃ¡nh má»‹n bá»“ng bá»nh.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1565,10 +1645,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi trân châu trắng",
+            Name = "Sá»¯a tÆ°Æ¡i trÃ¢n chÃ¢u tráº¯ng",
             Slug = "sua-tuoi-tran-chau-trang",
             ProductType = "DRINK",
-            Description = "Sữa tươi béo ngọt thanh tao cùng trân châu ngọc trai trắng giòn sần sật.",
+            Description = "Sá»¯a tÆ°Æ¡i bÃ©o ngá»t thanh tao cÃ¹ng trÃ¢n chÃ¢u ngá»c trai tráº¯ng giÃ²n sáº§n sáº­t.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1579,10 +1659,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi cacao",
+            Name = "Sá»¯a tÆ°Æ¡i cacao",
             Slug = "sua-tuoi-cacao",
             ProductType = "DRINK",
-            Description = "Cacao nguyên chất hòa cùng sữa tươi tạo hương vị ngọt đắng quyến rũ.",
+            Description = "Cacao nguyÃªn cháº¥t hÃ²a cÃ¹ng sá»¯a tÆ°Æ¡i táº¡o hÆ°Æ¡ng vá»‹ ngá»t Ä‘áº¯ng quyáº¿n rÅ©.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1593,10 +1673,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi caramel",
+            Name = "Sá»¯a tÆ°Æ¡i caramel",
             Slug = "sua-tuoi-caramel",
             ProductType = "DRINK",
-            Description = "Caramel nấu bơ đường thơm nồng hòa tan trong sữa tươi mát lành.",
+            Description = "Caramel náº¥u bÆ¡ Ä‘Æ°á»ng thÆ¡m ná»“ng hÃ²a tan trong sá»¯a tÆ°Æ¡i mÃ¡t lÃ nh.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1607,10 +1687,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFreshMilkDrink.Id,
-            Name = "Sữa tươi mật ong",
+            Name = "Sá»¯a tÆ°Æ¡i máº­t ong",
             Slug = "sua-tuoi-mat-ong",
             ProductType = "DRINK",
-            Description = "Vị ngọt thanh khiết của mật ong hoa rừng nguyên chất và sữa tươi dinh dưỡng.",
+            Description = "Vá»‹ ngá»t thanh khiáº¿t cá»§a máº­t ong hoa rá»«ng nguyÃªn cháº¥t vÃ  sá»¯a tÆ°Æ¡i dinh dÆ°á»¡ng.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1618,14 +1698,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.6 Matcha & Đồ Uống Cacao ---
+        // --- 5.1.6 Matcha & Äá»“ Uá»‘ng Cacao ---
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
             Name = "Matcha latte",
             Slug = "matcha-latte",
             ProductType = "DRINK",
-            Description = "Matcha Uji cao cấp đánh bọt mịn màng cùng sữa tươi thanh trùng nóng/đá.",
+            Description = "Matcha Uji cao cáº¥p Ä‘Ã¡nh bá»t má»‹n mÃ ng cÃ¹ng sá»¯a tÆ°Æ¡i thanh trÃ¹ng nÃ³ng/Ä‘Ã¡.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1636,10 +1716,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Matcha latte trân châu",
+            Name = "Matcha latte trÃ¢n chÃ¢u",
             Slug = "matcha-latte-tran-chau",
             ProductType = "DRINK",
-            Description = "Matcha latte thơm thanh kết hợp trân châu hoàng kim dẻo ngọt đậm đà.",
+            Description = "Matcha latte thÆ¡m thanh káº¿t há»£p trÃ¢n chÃ¢u hoÃ ng kim dáº»o ngá»t Ä‘áº­m Ä‘Ã .",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1653,7 +1733,7 @@ public static class DbInitializer
             Name = "Matcha latte kem cheese",
             Slug = "matcha-latte-kem-cheese",
             ProductType = "DRINK",
-            Description = "Vị chát nhẹ của matcha hòa quyện cùng lớp kem phô mai béo ngậy mặn mòi.",
+            Description = "Vá»‹ chÃ¡t nháº¹ cá»§a matcha hÃ²a quyá»‡n cÃ¹ng lá»›p kem phÃ´ mai bÃ©o ngáº­y máº·n mÃ²i.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1664,10 +1744,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Matcha latte đậu đỏ",
+            Name = "Matcha latte Ä‘áº­u Ä‘á»",
             Slug = "matcha-latte-dau-do",
             ProductType = "DRINK",
-            Description = "Sự kết hợp chuẩn vị Nhật: Matcha thanh mát và hạt đậu đỏ bùi ngọt dẻo thơm.",
+            Description = "Sá»± káº¿t há»£p chuáº©n vá»‹ Nháº­t: Matcha thanh mÃ¡t vÃ  háº¡t Ä‘áº­u Ä‘á» bÃ¹i ngá»t dáº»o thÆ¡m.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1678,10 +1758,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Matcha dâu",
+            Name = "Matcha dÃ¢u",
             Slug = "matcha-dau",
             ProductType = "DRINK",
-            Description = "Hai tầng màu xanh - đỏ bắt mắt, vị dâu tây ngọt ngào cân bằng vị chát matcha.",
+            Description = "Hai táº§ng mÃ u xanh - Ä‘á» báº¯t máº¯t, vá»‹ dÃ¢u tÃ¢y ngá»t ngÃ o cÃ¢n báº±ng vá»‹ chÃ¡t matcha.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1692,10 +1772,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Matcha dừa",
+            Name = "Matcha dá»«a",
             Slug = "matcha-dua",
             ProductType = "DRINK",
-            Description = "Matcha Nhật Bản thơm dịu kết hợp nước cốt dừa Bến Tre béo bùi thanh mát.",
+            Description = "Matcha Nháº­t Báº£n thÆ¡m dá»‹u káº¿t há»£p nÆ°á»›c cá»‘t dá»«a Báº¿n Tre bÃ©o bÃ¹i thanh mÃ¡t.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1706,10 +1786,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Matcha đá xay",
+            Name = "Matcha Ä‘Ã¡ xay",
             Slug = "matcha-da-xay-cacao",
             ProductType = "DRINK",
-            Description = "Matcha xay nhuyễn cùng đá tuyết và sữa, phủ ngọn kem tươi whipping cream mịn màng.",
+            Description = "Matcha xay nhuyá»…n cÃ¹ng Ä‘Ã¡ tuyáº¿t vÃ  sá»¯a, phá»§ ngá»n kem tÆ°Æ¡i whipping cream má»‹n mÃ ng.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1720,10 +1800,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Cacao sữa đá",
+            Name = "Cacao sá»¯a Ä‘Ã¡",
             Slug = "cacao-sua-da",
             ProductType = "DRINK",
-            Description = "Cacao nguyên chất đậm đà sánh quyện cùng sữa đặc và đá mát lạnh.",
+            Description = "Cacao nguyÃªn cháº¥t Ä‘áº­m Ä‘Ã  sÃ¡nh quyá»‡n cÃ¹ng sá»¯a Ä‘áº·c vÃ  Ä‘Ã¡ mÃ¡t láº¡nh.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1734,10 +1814,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Cacao nóng",
+            Name = "Cacao nÃ³ng",
             Slug = "cacao-nong",
             ProductType = "DRINK",
-            Description = "Tách cacao nóng ấm lòng, thơm lừng hương socola xua tan ngày lạnh.",
+            Description = "TÃ¡ch cacao nÃ³ng áº¥m lÃ²ng, thÆ¡m lá»«ng hÆ°Æ¡ng socola xua tan ngÃ y láº¡nh.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1751,7 +1831,7 @@ public static class DbInitializer
             Name = "Cacao kem cheese",
             Slug = "cacao-kem-cheese",
             ProductType = "DRINK",
-            Description = "Cacao đậm đà sánh mịn phủ lớp kem béo mặn cheese foam khó cưỡng.",
+            Description = "Cacao Ä‘áº­m Ä‘Ã  sÃ¡nh má»‹n phá»§ lá»›p kem bÃ©o máº·n cheese foam khÃ³ cÆ°á»¡ng.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1762,10 +1842,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Cacao đá xay",
+            Name = "Cacao Ä‘Ã¡ xay",
             Slug = "cacao-da-xay-matcha",
             ProductType = "DRINK",
-            Description = "Cacao xay đá tuyết mát lạnh sảng khoái phủ sốt socola và kem whipping.",
+            Description = "Cacao xay Ä‘Ã¡ tuyáº¿t mÃ¡t láº¡nh sáº£ng khoÃ¡i phá»§ sá»‘t socola vÃ  kem whipping.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1776,10 +1856,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Socola sữa đá",
+            Name = "Socola sá»¯a Ä‘Ã¡",
             Slug = "socola-sua-da",
             ProductType = "DRINK",
-            Description = "Socola sữa ngọt ngào êm dịu, món khoái khẩu của tín đồ đồ ngọt.",
+            Description = "Socola sá»¯a ngá»t ngÃ o Ãªm dá»‹u, mÃ³n khoÃ¡i kháº©u cá»§a tÃ­n Ä‘á»“ Ä‘á»“ ngá»t.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1790,10 +1870,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catMatchaCacao.Id,
-            Name = "Socola bạc hà",
+            Name = "Socola báº¡c hÃ ",
             Slug = "socola-bac-ha",
             ProductType = "DRINK",
-            Description = "Vị ngọt đắng của socola hòa cùng vị the mát sảng khoái của siro bạc hà.",
+            Description = "Vá»‹ ngá»t Ä‘áº¯ng cá»§a socola hÃ²a cÃ¹ng vá»‹ the mÃ¡t sáº£ng khoÃ¡i cá»§a siro báº¡c hÃ .",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1801,14 +1881,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.7 Frappe & Đồ Uống Đá Xay ---
+        // --- 5.1.7 Frappe & Äá»“ Uá»‘ng ÄÃ¡ Xay ---
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Matcha đá xay Frappe",
+            Name = "Matcha Ä‘Ã¡ xay Frappe",
             Slug = "matcha-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Matcha Uji Nhật xay nhuyễn mịn cùng sữa và đá tuyết, phủ kem whipping béo ngậy.",
+            Description = "Matcha Uji Nháº­t xay nhuyá»…n má»‹n cÃ¹ng sá»¯a vÃ  Ä‘Ã¡ tuyáº¿t, phá»§ kem whipping bÃ©o ngáº­y.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1819,10 +1899,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Socola đá xay Frappe",
+            Name = "Socola Ä‘Ã¡ xay Frappe",
             Slug = "socola-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Socola đen thượng hạng xay cùng đá tuyết mát lạnh ngập tràn năng lượng.",
+            Description = "Socola Ä‘en thÆ°á»£ng háº¡ng xay cÃ¹ng Ä‘Ã¡ tuyáº¿t mÃ¡t láº¡nh ngáº­p trÃ n nÄƒng lÆ°á»£ng.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1833,10 +1913,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Cacao đá xay Frappe",
+            Name = "Cacao Ä‘Ã¡ xay Frappe",
             Slug = "cacao-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Hương cacao nồng nàn xay mịn sánh như kem tuyết mùa hè.",
+            Description = "HÆ°Æ¡ng cacao ná»“ng nÃ n xay má»‹n sÃ¡nh nhÆ° kem tuyáº¿t mÃ¹a hÃ¨.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1847,10 +1927,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Cookies and cream đá xay",
+            Name = "Cookies and cream Ä‘Ã¡ xay",
             Slug = "cookies-and-cream-da-xay",
             ProductType = "DRINK",
-            Description = "Bánh quy cookies giòn rụm xay cùng sữa vani và phủ vụn bánh giòn tan.",
+            Description = "BÃ¡nh quy cookies giÃ²n rá»¥m xay cÃ¹ng sá»¯a vani vÃ  phá»§ vá»¥n bÃ¡nh giÃ²n tan.",
             BasePrice = 58000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1861,10 +1941,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Oreo đá xay Frappe",
+            Name = "Oreo Ä‘Ã¡ xay Frappe",
             Slug = "oreo-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Bánh Oreo đen kẹp kem xay nhuyễn cùng kem béo và sốt socola đậm đặc.",
+            Description = "BÃ¡nh Oreo Ä‘en káº¹p kem xay nhuyá»…n cÃ¹ng kem bÃ©o vÃ  sá»‘t socola Ä‘áº­m Ä‘áº·c.",
             BasePrice = 58000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1875,10 +1955,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Dâu đá xay Frappe",
+            Name = "DÃ¢u Ä‘Ã¡ xay Frappe",
             Slug = "dau-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Dâu tây tươi chua ngọt xay tuyết mát lạnh, màu hồng phấn đáng yêu.",
+            Description = "DÃ¢u tÃ¢y tÆ°Æ¡i chua ngá»t xay tuyáº¿t mÃ¡t láº¡nh, mÃ u há»“ng pháº¥n Ä‘Ã¡ng yÃªu.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1889,10 +1969,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Xoài đá xay Frappe",
+            Name = "XoÃ i Ä‘Ã¡ xay Frappe",
             Slug = "xoai-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Xoài cát chín vàng ươm xay mát lạnh cùng sữa chua và đá tuyết sảng khoái.",
+            Description = "XoÃ i cÃ¡t chÃ­n vÃ ng Æ°Æ¡m xay mÃ¡t láº¡nh cÃ¹ng sá»¯a chua vÃ  Ä‘Ã¡ tuyáº¿t sáº£ng khoÃ¡i.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1903,10 +1983,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Việt quất đá xay Frappe",
+            Name = "Viá»‡t quáº¥t Ä‘Ã¡ xay Frappe",
             Slug = "viet-quat-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Việt quất Bắc Mỹ mọng nước xay đá tuyết giàu chất chống lão hóa.",
+            Description = "Viá»‡t quáº¥t Báº¯c Má»¹ má»ng nÆ°á»›c xay Ä‘Ã¡ tuyáº¿t giÃ u cháº¥t chá»‘ng lÃ£o hÃ³a.",
             BasePrice = 58000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1917,10 +1997,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Caramel đá xay Frappe",
+            Name = "Caramel Ä‘Ã¡ xay Frappe",
             Slug = "caramel-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Sốt caramel nấu thơm bơ xay cùng đá sữa ngọt ngào êm ái.",
+            Description = "Sá»‘t caramel náº¥u thÆ¡m bÆ¡ xay cÃ¹ng Ä‘Ã¡ sá»¯a ngá»t ngÃ o Ãªm Ã¡i.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1931,10 +2011,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Cà phê đá xay Frappe",
+            Name = "CÃ  phÃª Ä‘Ã¡ xay Frappe",
             Slug = "ca-phe-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Cà phê Robusta Đắk Lắk đậm đà xay đá tuyết sảng khoái tỉnh táo cả ngày.",
+            Description = "CÃ  phÃª Robusta Äáº¯k Láº¯k Ä‘áº­m Ä‘Ã  xay Ä‘Ã¡ tuyáº¿t sáº£ng khoÃ¡i tá»‰nh tÃ¡o cáº£ ngÃ y.",
             BasePrice = 52000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1945,10 +2025,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFrappeIceBlended.Id,
-            Name = "Mocha đá xay Frappe",
+            Name = "Mocha Ä‘Ã¡ xay Frappe",
             Slug = "mocha-da-xay-frappe",
             ProductType = "DRINK",
-            Description = "Bản hòa tấu giữa cà phê espresso và socola đen xay mịn phủ kem bông tuyết.",
+            Description = "Báº£n hÃ²a táº¥u giá»¯a cÃ  phÃª espresso vÃ  socola Ä‘en xay má»‹n phá»§ kem bÃ´ng tuyáº¿t.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1962,7 +2042,7 @@ public static class DbInitializer
             Name = "Frappuccino caramel",
             Slug = "frappuccino-caramel",
             ProductType = "DRINK",
-            Description = "Cà phê frappuccino phong cách Ý đượm vị caramel béo ngậy và sốt kem vani.",
+            Description = "CÃ  phÃª frappuccino phong cÃ¡ch Ã Ä‘Æ°á»£m vá»‹ caramel bÃ©o ngáº­y vÃ  sá»‘t kem vani.",
             BasePrice = 60000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -1976,7 +2056,7 @@ public static class DbInitializer
             Name = "Frappuccino socola",
             Slug = "frappuccino-socola",
             ProductType = "DRINK",
-            Description = "Frappuccino socola thượng hạng rưới sốt fudge socola đậm đà.",
+            Description = "Frappuccino socola thÆ°á»£ng háº¡ng rÆ°á»›i sá»‘t fudge socola Ä‘áº­m Ä‘Ã .",
             BasePrice = 60000,
             ImageUrl = "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -1984,14 +2064,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.8 Nước Ép Trái Cây ---
+        // --- 5.1.8 NÆ°á»›c Ã‰p TrÃ¡i CÃ¢y ---
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép cam",
+            Name = "NÆ°á»›c Ã©p cam",
             Slug = "nuoc-ep-cam",
             ProductType = "DRINK",
-            Description = "Cam sành tươi vắt nguyên chất mọng nước dồi dào vitamin C tăng đề kháng.",
+            Description = "Cam sÃ nh tÆ°Æ¡i váº¯t nguyÃªn cháº¥t má»ng nÆ°á»›c dá»“i dÃ o vitamin C tÄƒng Ä‘á» khÃ¡ng.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2002,10 +2082,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép dưa hấu",
+            Name = "NÆ°á»›c Ã©p dÆ°a háº¥u",
             Slug = "nuoc-ep-dua-hau",
             ProductType = "DRINK",
-            Description = "Dưa hấu đỏ ngọt mát tự nhiên giải nhiệt tức thì trong ngày oi bức.",
+            Description = "DÆ°a háº¥u Ä‘á» ngá»t mÃ¡t tá»± nhiÃªn giáº£i nhiá»‡t tá»©c thÃ¬ trong ngÃ y oi bá»©c.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2016,10 +2096,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép dứa",
+            Name = "NÆ°á»›c Ã©p dá»©a",
             Slug = "nuoc-ep-dua",
             ProductType = "DRINK",
-            Description = "Dứa chín thơm vàng ươm chua ngọt tự nhiên hỗ trợ tiêu hóa và giữ dáng.",
+            Description = "Dá»©a chÃ­n thÆ¡m vÃ ng Æ°Æ¡m chua ngá»t tá»± nhiÃªn há»— trá»£ tiÃªu hÃ³a vÃ  giá»¯ dÃ¡ng.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2030,10 +2110,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép táo",
+            Name = "NÆ°á»›c Ã©p tÃ¡o",
             Slug = "nuoc-ep-tao",
             ProductType = "DRINK",
-            Description = "Táo New Zealand ép nguyên chất ngọt thanh giòn mát tốt cho tim mạch.",
+            Description = "TÃ¡o New Zealand Ã©p nguyÃªn cháº¥t ngá»t thanh giÃ²n mÃ¡t tá»‘t cho tim máº¡ch.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2044,10 +2124,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép cà rốt",
+            Name = "NÆ°á»›c Ã©p cÃ  rá»‘t",
             Slug = "nuoc-ep-ca-rot",
             ProductType = "DRINK",
-            Description = "Cà rốt tươi giàu beta-carotene sáng mắt và đẹp da mịn màng.",
+            Description = "CÃ  rá»‘t tÆ°Æ¡i giÃ u beta-carotene sÃ¡ng máº¯t vÃ  Ä‘áº¹p da má»‹n mÃ ng.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2058,10 +2138,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép ổi",
+            Name = "NÆ°á»›c Ã©p á»•i",
             Slug = "nuoc-ep-oi",
             ProductType = "DRINK",
-            Description = "Ổi ruột hồng tươi ngon giàu vitamin C gấp 4 lần cam tươi.",
+            Description = "á»”i ruá»™t há»“ng tÆ°Æ¡i ngon giÃ u vitamin C gáº¥p 4 láº§n cam tÆ°Æ¡i.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2072,10 +2152,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép dâu",
+            Name = "NÆ°á»›c Ã©p dÃ¢u",
             Slug = "nuoc-ep-dau",
             ProductType = "DRINK",
-            Description = "Dâu tây Đà Lạt ép nguyên quả màu đỏ thắm quyến rũ vị chua ngọt tao nhã.",
+            Description = "DÃ¢u tÃ¢y ÄÃ  Láº¡t Ã©p nguyÃªn quáº£ mÃ u Ä‘á» tháº¯m quyáº¿n rÅ© vá»‹ chua ngá»t tao nhÃ£.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2086,10 +2166,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép xoài",
+            Name = "NÆ°á»›c Ã©p xoÃ i",
             Slug = "nuoc-ep-xoai",
             ProductType = "DRINK",
-            Description = "Xoài cát Hòa Lộc ép mịn ngọt đậm đà hương vị trái cây nhiệt đới.",
+            Description = "XoÃ i cÃ¡t HÃ²a Lá»™c Ã©p má»‹n ngá»t Ä‘áº­m Ä‘Ã  hÆ°Æ¡ng vá»‹ trÃ¡i cÃ¢y nhiá»‡t Ä‘á»›i.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2100,10 +2180,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép chanh dây",
+            Name = "NÆ°á»›c Ã©p chanh dÃ¢y",
             Slug = "nuoc-ep-chanh-day",
             ProductType = "DRINK",
-            Description = "Chanh dây tươi lọc hạt chua ngọt thanh tao kích thích vị giác.",
+            Description = "Chanh dÃ¢y tÆ°Æ¡i lá»c háº¡t chua ngá»t thanh tao kÃ­ch thÃ­ch vá»‹ giÃ¡c.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2114,10 +2194,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép cóc",
+            Name = "NÆ°á»›c Ã©p cÃ³c",
             Slug = "nuoc-ep-coc",
             ProductType = "DRINK",
-            Description = "Cóc non chua giòn rụm ép nguyên chất điểm xuyết xíu muối ớt nhẹ.",
+            Description = "CÃ³c non chua giÃ²n rá»¥m Ã©p nguyÃªn cháº¥t Ä‘iá»ƒm xuyáº¿t xÃ­u muá»‘i á»›t nháº¹.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2128,10 +2208,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép thơm cà rốt",
+            Name = "NÆ°á»›c Ã©p thÆ¡m cÃ  rá»‘t",
             Slug = "nuoc-ep-thom-ca-rot",
             ProductType = "DRINK",
-            Description = "Sự kết hợp hoàn hảo giữa vị ngọt thanh cà rốt và chua nhẹ của thơm.",
+            Description = "Sá»± káº¿t há»£p hoÃ n háº£o giá»¯a vá»‹ ngá»t thanh cÃ  rá»‘t vÃ  chua nháº¹ cá»§a thÆ¡m.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2142,10 +2222,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép cam cà rốt",
+            Name = "NÆ°á»›c Ã©p cam cÃ  rá»‘t",
             Slug = "nuoc-ep-cam-ca-rot",
             ProductType = "DRINK",
-            Description = "Bộ đôi cam vàng và cà rốt giàu vitamin bổ sung năng lượng tươi mới.",
+            Description = "Bá»™ Ä‘Ã´i cam vÃ ng vÃ  cÃ  rá»‘t giÃ u vitamin bá»• sung nÄƒng lÆ°á»£ng tÆ°Æ¡i má»›i.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2156,10 +2236,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép táo dứa",
+            Name = "NÆ°á»›c Ã©p tÃ¡o dá»©a",
             Slug = "nuoc-ep-tao-dua",
             ProductType = "DRINK",
-            Description = "Táo ngọt dịu quyện dứa thơm chua thanh tạo hương vị thanh lọc tuyệt vời.",
+            Description = "TÃ¡o ngá»t dá»‹u quyá»‡n dá»©a thÆ¡m chua thanh táº¡o hÆ°Æ¡ng vá»‹ thanh lá»c tuyá»‡t vá»i.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2170,10 +2250,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép dưa hấu dứa",
+            Name = "NÆ°á»›c Ã©p dÆ°a háº¥u dá»©a",
             Slug = "nuoc-ep-dua-hau-dua",
             ProductType = "DRINK",
-            Description = "Dưa hấu ngọt nước phối dứa nhiệt đới giải nhiệt sảng khoái.",
+            Description = "DÆ°a háº¥u ngá»t nÆ°á»›c phá»‘i dá»©a nhiá»‡t Ä‘á»›i giáº£i nhiá»‡t sáº£ng khoÃ¡i.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2184,10 +2264,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catFruitJuice.Id,
-            Name = "Nước ép trái cây hỗn hợp",
+            Name = "NÆ°á»›c Ã©p trÃ¡i cÃ¢y há»—n há»£p",
             Slug = "nuoc-ep-trai-cay-hon-hop",
             ProductType = "DRINK",
-            Description = "Công thức detox tổng hợp cam, táo, cà rốt và dứa tươi thanh lọc cơ thể.",
+            Description = "CÃ´ng thá»©c detox tá»•ng há»£p cam, tÃ¡o, cÃ  rá»‘t vÃ  dá»©a tÆ°Æ¡i thanh lá»c cÆ¡ thá»ƒ.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2195,14 +2275,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.9 Soda & Đồ Uống Có Gas ---
+        // --- 5.1.9 Soda & Äá»“ Uá»‘ng CÃ³ Gas ---
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
             Name = "Soda chanh",
             Slug = "soda-chanh",
             ProductType = "DRINK",
-            Description = "Soda chanh tươi sủi bọt mát lạnh cổ điển giải nhiệt cực nhanh.",
+            Description = "Soda chanh tÆ°Æ¡i sá»§i bá»t mÃ¡t láº¡nh cá»• Ä‘iá»ƒn giáº£i nhiá»‡t cá»±c nhanh.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2213,10 +2293,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda việt quất",
+            Name = "Soda viá»‡t quáº¥t",
             Slug = "soda-viet-quat",
             ProductType = "DRINK",
-            Description = "Màu tím biếc huyền ảo, vị việt quất ngọt thơm hòa cùng bọt ga sảng khoái.",
+            Description = "MÃ u tÃ­m biáº¿c huyá»n áº£o, vá»‹ viá»‡t quáº¥t ngá»t thÆ¡m hÃ²a cÃ¹ng bá»t ga sáº£ng khoÃ¡i.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2227,10 +2307,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda dâu",
+            Name = "Soda dÃ¢u",
             Slug = "soda-dau",
             ProductType = "DRINK",
-            Description = "Soda dâu tây đỏ tươi chua ngọt dịu dàng điểm xuyết lá bạc hà.",
+            Description = "Soda dÃ¢u tÃ¢y Ä‘á» tÆ°Æ¡i chua ngá»t dá»‹u dÃ ng Ä‘iá»ƒm xuyáº¿t lÃ¡ báº¡c hÃ .",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2241,10 +2321,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda đào",
+            Name = "Soda Ä‘Ã o",
             Slug = "soda-dao",
             ProductType = "DRINK",
-            Description = "Hương đào thơm nức quyện cùng bọt ga sủi tăm kích thích vị giác.",
+            Description = "HÆ°Æ¡ng Ä‘Ã o thÆ¡m ná»©c quyá»‡n cÃ¹ng bá»t ga sá»§i tÄƒm kÃ­ch thÃ­ch vá»‹ giÃ¡c.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2258,7 +2338,7 @@ public static class DbInitializer
             Name = "Soda kiwi",
             Slug = "soda-kiwi",
             ProductType = "DRINK",
-            Description = "Màu xanh ngọc bích từ kiwi tươi chua thanh mát rượi.",
+            Description = "MÃ u xanh ngá»c bÃ­ch tá»« kiwi tÆ°Æ¡i chua thanh mÃ¡t rÆ°á»£i.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2269,10 +2349,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda chanh dây",
+            Name = "Soda chanh dÃ¢y",
             Slug = "soda-chanh-day",
             ProductType = "DRINK",
-            Description = "Chanh dây tươi chua ngọt hòa cùng soda bọt ga bừng tỉnh tức thì.",
+            Description = "Chanh dÃ¢y tÆ°Æ¡i chua ngá»t hÃ²a cÃ¹ng soda bá»t ga bá»«ng tá»‰nh tá»©c thÃ¬.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2283,10 +2363,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda bạc hà",
+            Name = "Soda báº¡c hÃ ",
             Slug = "soda-bac-ha",
             ProductType = "DRINK",
-            Description = "Hương bạc hà xanh mát the the lạnh buốt cuốn hút mọi ánh nhìn.",
+            Description = "HÆ°Æ¡ng báº¡c hÃ  xanh mÃ¡t the the láº¡nh buá»‘t cuá»‘n hÃºt má»i Ã¡nh nhÃ¬n.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2300,7 +2380,7 @@ public static class DbInitializer
             Name = "Soda cam",
             Slug = "soda-cam",
             ProductType = "DRINK",
-            Description = "Cam vàng sủi bọt tràn đầy sức sống và vitamin C.",
+            Description = "Cam vÃ ng sá»§i bá»t trÃ n Ä‘áº§y sá»©c sá»‘ng vÃ  vitamin C.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2311,10 +2391,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda táo xanh",
+            Name = "Soda tÃ¡o xanh",
             Slug = "soda-tao-xanh",
             ProductType = "DRINK",
-            Description = "Táo xanh giòn ngọt kết hợp soda ga tươi mát trẻ trung.",
+            Description = "TÃ¡o xanh giÃ²n ngá»t káº¿t há»£p soda ga tÆ°Æ¡i mÃ¡t tráº» trung.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2325,10 +2405,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda nhiệt đới",
+            Name = "Soda nhiá»‡t Ä‘á»›i",
             Slug = "soda-nhiet-doi",
             ProductType = "DRINK",
-            Description = "Hỗn hợp trái cây nhiệt đới thơm mát bùng nổ cùng bọt ga lấp lánh.",
+            Description = "Há»—n há»£p trÃ¡i cÃ¢y nhiá»‡t Ä‘á»›i thÆ¡m mÃ¡t bÃ¹ng ná»• cÃ¹ng bá»t ga láº¥p lÃ¡nh.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2339,10 +2419,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda xoài",
+            Name = "Soda xoÃ i",
             Slug = "soda-xoai",
             ProductType = "DRINK",
-            Description = "Xoài chín vàng ngọt ngào kết hợp bọt ga mát lạnh sảng khoái.",
+            Description = "XoÃ i chÃ­n vÃ ng ngá»t ngÃ o káº¿t há»£p bá»t ga mÃ¡t láº¡nh sáº£ng khoÃ¡i.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2353,10 +2433,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda vải",
+            Name = "Soda váº£i",
             Slug = "soda-vai",
             ProductType = "DRINK",
-            Description = "Hương vải ngọt dịu quý phái trong từng ngụm soda sủi tăm.",
+            Description = "HÆ°Æ¡ng váº£i ngá»t dá»‹u quÃ½ phÃ¡i trong tá»«ng ngá»¥m soda sá»§i tÄƒm.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2367,10 +2447,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catSodaGas.Id,
-            Name = "Soda dưa lưới",
+            Name = "Soda dÆ°a lÆ°á»›i",
             Slug = "soda-dua-luoi",
             ProductType = "DRINK",
-            Description = "Dưa lưới thanh tao ngọt mát sảng khoái ngày hè.",
+            Description = "DÆ°a lÆ°á»›i thanh tao ngá»t mÃ¡t sáº£ng khoÃ¡i ngÃ y hÃ¨.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2384,7 +2464,7 @@ public static class DbInitializer
             Name = "Soda blue ocean",
             Slug = "soda-blue-ocean",
             ProductType = "DRINK",
-            Description = "Sắc xanh đại dương sâu thẳm từ siro Blue Curacao cam đắng và soda sảng khoái.",
+            Description = "Sáº¯c xanh Ä‘áº¡i dÆ°Æ¡ng sÃ¢u tháº³m tá»« siro Blue Curacao cam Ä‘áº¯ng vÃ  soda sáº£ng khoÃ¡i.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2392,14 +2472,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.10 Nước Chanh & Đồ Uống Giải Khát ---
+        // --- 5.1.10 NÆ°á»›c Chanh & Äá»“ Uá»‘ng Giáº£i KhÃ¡t ---
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Chanh tươi",
+            Name = "Chanh tÆ°Æ¡i",
             Slug = "chanh-tuoi-da-duong",
             ProductType = "DRINK",
-            Description = "Nước chanh tươi đá đường truyền thống thanh mát bình dị.",
+            Description = "NÆ°á»›c chanh tÆ°Æ¡i Ä‘Ã¡ Ä‘Æ°á»ng truyá»n thá»‘ng thanh mÃ¡t bÃ¬nh dá»‹.",
             BasePrice = 28000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2410,10 +2490,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Chanh mật ong",
+            Name = "Chanh máº­t ong",
             Slug = "chanh-mat-ong-giai-khat",
             ProductType = "DRINK",
-            Description = "Chanh tươi kết hợp mật ong rừng nguyên chất ngọt thanh ấm áp.",
+            Description = "Chanh tÆ°Æ¡i káº¿t há»£p máº­t ong rá»«ng nguyÃªn cháº¥t ngá»t thanh áº¥m Ã¡p.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2424,10 +2504,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Chanh dây",
+            Name = "Chanh dÃ¢y",
             Slug = "chanh-day-da-duong",
             ProductType = "DRINK",
-            Description = "Nước cốt chanh dây thơm lừng hạt giòn ngọt ngào giải khát.",
+            Description = "NÆ°á»›c cá»‘t chanh dÃ¢y thÆ¡m lá»«ng háº¡t giÃ²n ngá»t ngÃ o giáº£i khÃ¡t.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2438,10 +2518,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Tắc mật ong",
+            Name = "Táº¯c máº­t ong",
             Slug = "tac-mat-ong-giai-khat",
             ProductType = "DRINK",
-            Description = "Tắc thơm mùi tinh dầu quất hòa cùng mật ong hoa cà phê thanh ngọt.",
+            Description = "Táº¯c thÆ¡m mÃ¹i tinh dáº§u quáº¥t hÃ²a cÃ¹ng máº­t ong hoa cÃ  phÃª thanh ngá»t.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2452,10 +2532,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Tắc xí muội",
+            Name = "Táº¯c xÃ­ muá»™i",
             Slug = "tac-xi-muoi",
             ProductType = "DRINK",
-            Description = "Vị mặn ngọt chua cay hài hòa của xí muội Bắc ngâm tắc giải cảm thanh giọng.",
+            Description = "Vá»‹ máº·n ngá»t chua cay hÃ i hÃ²a cá»§a xÃ­ muá»™i Báº¯c ngÃ¢m táº¯c giáº£i cáº£m thanh giá»ng.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2466,10 +2546,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Chanh muối",
+            Name = "Chanh muá»‘i",
             Slug = "chanh-muoi-lau-nam",
             ProductType = "DRINK",
-            Description = "Chanh muối lâu năm ngâm mật đường, bù điện giải cực tốt sau khi vận động.",
+            Description = "Chanh muá»‘i lÃ¢u nÄƒm ngÃ¢m máº­t Ä‘Æ°á»ng, bÃ¹ Ä‘iá»‡n giáº£i cá»±c tá»‘t sau khi váº­n Ä‘á»™ng.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2480,10 +2560,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Chanh sả",
+            Name = "Chanh sáº£",
             Slug = "chanh-sa-giai-nhiet",
             ProductType = "DRINK",
-            Description = "Chanh tươi thơm lừng hương sả đập dập the mát thanh lọc cơ thể.",
+            Description = "Chanh tÆ°Æ¡i thÆ¡m lá»«ng hÆ°Æ¡ng sáº£ Ä‘áº­p dáº­p the mÃ¡t thanh lá»c cÆ¡ thá»ƒ.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2494,10 +2574,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Nước mơ",
+            Name = "NÆ°á»›c mÆ¡",
             Slug = "nuoc-mo-chua-huong",
             ProductType = "DRINK",
-            Description = "Mơ ngâm chùa Hương chua ngọt đậm đà phong vị Hà thành xưa.",
+            Description = "MÆ¡ ngÃ¢m chÃ¹a HÆ°Æ¡ng chua ngá»t Ä‘áº­m Ä‘Ã  phong vá»‹ HÃ  thÃ nh xÆ°a.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2508,10 +2588,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Nước sấu",
+            Name = "NÆ°á»›c sáº¥u",
             Slug = "nuoc-sau-ngam-gung",
             ProductType = "DRINK",
-            Description = "Quả sấu giòn sần sật ngâm gừng ớt chua cay ngọt dịu mát ruột.",
+            Description = "Quáº£ sáº¥u giÃ²n sáº§n sáº­t ngÃ¢m gá»«ng á»›t chua cay ngá»t dá»‹u mÃ¡t ruá»™t.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2522,10 +2602,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Nước nha đam",
+            Name = "NÆ°á»›c nha Ä‘am",
             Slug = "nuoc-nha-dam-duong-phen",
             ProductType = "DRINK",
-            Description = "Thạch nha đam tươi giòn mát thanh nhiệt làm mát cơ thể tức thì.",
+            Description = "Tháº¡ch nha Ä‘am tÆ°Æ¡i giÃ²n mÃ¡t thanh nhiá»‡t lÃ m mÃ¡t cÆ¡ thá»ƒ tá»©c thÃ¬.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2536,10 +2616,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Nước dừa tươi",
+            Name = "NÆ°á»›c dá»«a tÆ°Æ¡i",
             Slug = "nuoc-dua-tuoi-ben-tre",
             ProductType = "DRINK",
-            Description = "Dừa xiêm Bến Tre ngọt nước thanh khiết nguyên quả tự nhiên.",
+            Description = "Dá»«a xiÃªm Báº¿n Tre ngá»t nÆ°á»›c thanh khiáº¿t nguyÃªn quáº£ tá»± nhiÃªn.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2550,10 +2630,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Nước dừa tắc",
+            Name = "NÆ°á»›c dá»«a táº¯c",
             Slug = "nuoc-dua-tac-sai-gon",
             ProductType = "DRINK",
-            Description = "Nước dừa xiêm ngọt mát thêm chút nước cốt tắc thơm dịu và cùi dừa non giòn.",
+            Description = "NÆ°á»›c dá»«a xiÃªm ngá»t mÃ¡t thÃªm chÃºt nÆ°á»›c cá»‘t táº¯c thÆ¡m dá»‹u vÃ  cÃ¹i dá»«a non giÃ²n.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2564,10 +2644,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catLemonRefreshment.Id,
-            Name = "Nước ép chanh dây mật ong",
+            Name = "NÆ°á»›c Ã©p chanh dÃ¢y máº­t ong",
             Slug = "nuoc-ep-chanh-day-mat-ong",
             ProductType = "DRINK",
-            Description = "Sự hòa quyện sánh mịn giữa chanh dây và mật ong hoa rừng nguyên chất.",
+            Description = "Sá»± hÃ²a quyá»‡n sÃ¡nh má»‹n giá»¯a chanh dÃ¢y vÃ  máº­t ong hoa rá»«ng nguyÃªn cháº¥t.",
             BasePrice = 40000,
             ImageUrl = "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2575,14 +2655,14 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1
         });
-        // --- 5.1.11 Cà Phê & Đồ Uống Bổ Sung ---
+        // --- 5.1.11 CÃ  PhÃª & Äá»“ Uá»‘ng Bá»• Sung ---
         products.Add(new Product
         {
             CategoryId = catCoffee.Id,
-            Name = "Cà phê đen",
+            Name = "CÃ  phÃª Ä‘en",
             Slug = "ca-phe-den-da",
             ProductType = "DRINK",
-            Description = "Cà phê phin truyền thống đậm đà vị đắng nguyên bản và hậu vị ngọt sâu.",
+            Description = "CÃ  phÃª phin truyá»n thá»‘ng Ä‘áº­m Ä‘Ã  vá»‹ Ä‘áº¯ng nguyÃªn báº£n vÃ  háº­u vá»‹ ngá»t sÃ¢u.",
             BasePrice = 28000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2593,10 +2673,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCoffee.Id,
-            Name = "Cà phê sữa",
+            Name = "CÃ  phÃª sá»¯a",
             Slug = "ca-phe-sua-da-sai-gon",
             ProductType = "DRINK",
-            Description = "Cà phê sữa đá Sài Gòn thơm nồng, đậm đà vị ngọt béo của sữa đặc hòa cùng cà phê đậm.",
+            Description = "CÃ  phÃª sá»¯a Ä‘Ã¡ SÃ i GÃ²n thÆ¡m ná»“ng, Ä‘áº­m Ä‘Ã  vá»‹ ngá»t bÃ©o cá»§a sá»¯a Ä‘áº·c hÃ²a cÃ¹ng cÃ  phÃª Ä‘áº­m.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2607,10 +2687,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCoffee.Id,
-            Name = "Bạc xỉu",
+            Name = "Báº¡c xá»‰u",
             Slug = "bac-xiu-da-ngot-ngao",
             ProductType = "DRINK",
-            Description = "Nhiều sữa ít cà phê, béo ngậy ngọt ngào thích hợp cho người thích cà phê nhẹ nhàng.",
+            Description = "Nhiá»u sá»¯a Ã­t cÃ  phÃª, bÃ©o ngáº­y ngá»t ngÃ o thÃ­ch há»£p cho ngÆ°á»i thÃ­ch cÃ  phÃª nháº¹ nhÃ ng.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2621,10 +2701,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCoffee.Id,
-            Name = "Cà phê muối",
+            Name = "CÃ  phÃª muá»‘i",
             Slug = "ca-phe-muoi-hue",
             ProductType = "DRINK",
-            Description = "Cà phê đậm vị nâng đỡ lớp kem muối béo ngậy mặn mà phong cách xứ Huế.",
+            Description = "CÃ  phÃª Ä‘áº­m vá»‹ nÃ¢ng Ä‘á»¡ lá»›p kem muá»‘i bÃ©o ngáº­y máº·n mÃ  phong cÃ¡ch xá»© Huáº¿.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2638,7 +2718,7 @@ public static class DbInitializer
             Name = "Latte",
             Slug = "latte-art-y",
             ProductType = "DRINK",
-            Description = "Cà phê espresso Ý hòa cùng sữa nóng đánh bọt mịn màng nghệ thuật latte art.",
+            Description = "CÃ  phÃª espresso Ã hÃ²a cÃ¹ng sá»¯a nÃ³ng Ä‘Ã¡nh bá»t má»‹n mÃ ng nghá»‡ thuáº­t latte art.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2652,7 +2732,7 @@ public static class DbInitializer
             Name = "Cappuccino",
             Slug = "cappuccino-y",
             ProductType = "DRINK",
-            Description = "Lớp bọt sữa dày xốp phủ bột quế cacao thơm nồng trên nền cà phê espresso.",
+            Description = "Lá»›p bá»t sá»¯a dÃ y xá»‘p phá»§ bá»™t quáº¿ cacao thÆ¡m ná»“ng trÃªn ná»n cÃ  phÃª espresso.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2666,7 +2746,7 @@ public static class DbInitializer
             Name = "Americano",
             Slug = "americano-da",
             ProductType = "DRINK",
-            Description = "Espresso pha loãng với nước thanh khiết, thơm nồng dịu êm không gắt.",
+            Description = "Espresso pha loÃ£ng vá»›i nÆ°á»›c thanh khiáº¿t, thÆ¡m ná»“ng dá»‹u Ãªm khÃ´ng gáº¯t.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2680,7 +2760,7 @@ public static class DbInitializer
             Name = "Mocha",
             Slug = "mocha-socola-nong-da",
             ProductType = "DRINK",
-            Description = "Sự kết hợp ngọt ngào giữa espresso, socola đen và sữa nóng sánh mịn.",
+            Description = "Sá»± káº¿t há»£p ngá»t ngÃ o giá»¯a espresso, socola Ä‘en vÃ  sá»¯a nÃ³ng sÃ¡nh má»‹n.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2694,7 +2774,7 @@ public static class DbInitializer
             Name = "Caramel macchiato",
             Slug = "caramel-macchiato-coffee",
             ProductType = "DRINK",
-            Description = "Sữa tươi đánh bọt, cà phê espresso và những vệt sốt caramel óng ả ngọt ngào.",
+            Description = "Sá»¯a tÆ°Æ¡i Ä‘Ã¡nh bá»t, cÃ  phÃª espresso vÃ  nhá»¯ng vá»‡t sá»‘t caramel Ã³ng áº£ ngá»t ngÃ o.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2708,7 +2788,7 @@ public static class DbInitializer
             Name = "Espresso",
             Slug = "espresso-shot",
             ProductType = "DRINK",
-            Description = "Một shot cà phê đậm đặc chiết xuất áp suất cao với lớp crema vàng dày mịn.",
+            Description = "Má»™t shot cÃ  phÃª Ä‘áº­m Ä‘áº·c chiáº¿t xuáº¥t Ã¡p suáº¥t cao vá»›i lá»›p crema vÃ ng dÃ y má»‹n.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2719,10 +2799,10 @@ public static class DbInitializer
         products.Add(new Product
         {
             CategoryId = catCoffee.Id,
-            Name = "Cà phê cốt dừa",
+            Name = "CÃ  phÃª cá»‘t dá»«a",
             Slug = "ca-phe-cot-dua-da-xay",
             ProductType = "DRINK",
-            Description = "Cà phê đậm đà hòa cùng nước cốt dừa xay đá tuyết béo bùi thơm lừng.",
+            Description = "CÃ  phÃª Ä‘áº­m Ä‘Ã  hÃ²a cÃ¹ng nÆ°á»›c cá»‘t dá»«a xay Ä‘Ã¡ tuyáº¿t bÃ©o bÃ¹i thÆ¡m lá»«ng.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2731,14 +2811,14 @@ public static class DbInitializer
             StockStatus = 1
         });
 
-        // --- 5.2 Category 2.1: Cá viên, bò viên & các loại viên chiên ---
+        // --- 5.2 Category 2.1: CÃ¡ viÃªn, bÃ² viÃªn & cÃ¡c loáº¡i viÃªn chiÃªn ---
         products.Add(new Product
         {
             CategoryId = catVienChien.Id,
-            Name = "Cá Viên Chiên Thập Cẩm Mẹt Lớn",
+            Name = "CÃ¡ ViÃªn ChiÃªn Tháº­p Cáº©m Máº¹t Lá»›n",
             Slug = "ca-vien-chien-thap-cam-met-lon",
             ProductType = "FOOD",
-            Description = "Mẹt viên chiên ngập tràn cá viên, bò viên, tôm viên, hồ lô, xúc xích và chả giò mini chiên ráo dầu vàng óng, ăn kèm dưa leo giòn và tương đen xào đặc biệt.",
+            Description = "Máº¹t viÃªn chiÃªn ngáº­p trÃ n cÃ¡ viÃªn, bÃ² viÃªn, tÃ´m viÃªn, há»“ lÃ´, xÃºc xÃ­ch vÃ  cháº£ giÃ² mini chiÃªn rÃ¡o dáº§u vÃ ng Ã³ng, Äƒn kÃ¨m dÆ°a leo giÃ²n vÃ  tÆ°Æ¡ng Ä‘en xÃ o Ä‘áº·c biá»‡t.",
             BasePrice = 65000,
             ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2746,16 +2826,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương đen & Tương ớt xào tỏi",
-            PortionDescription = "1 mẹt (khoảng 25 viên đủ 2-3 người ăn)"
+            DefaultSauce = "TÆ°Æ¡ng Ä‘en & TÆ°Æ¡ng á»›t xÃ o tá»i",
+            PortionDescription = "1 máº¹t (khoáº£ng 25 viÃªn Ä‘á»§ 2-3 ngÆ°á»i Äƒn)"
         });
         products.Add(new Product
         {
             CategoryId = catVienChien.Id,
-            Name = "Cá Viên Chiên Truyền Thống",
+            Name = "CÃ¡ ViÃªn ChiÃªn Truyá»n Thá»‘ng",
             Slug = "ca-vien-chien-truyen-thong",
             ProductType = "FOOD",
-            Description = "Cá viên chiên giòn thơm, dai ngọt tự nhiên, phồng tròn chấm tương ớt hoặc tương đen đậm vị.",
+            Description = "CÃ¡ viÃªn chiÃªn giÃ²n thÆ¡m, dai ngá»t tá»± nhiÃªn, phá»“ng trÃ²n cháº¥m tÆ°Æ¡ng á»›t hoáº·c tÆ°Æ¡ng Ä‘en Ä‘áº­m vá»‹.",
             BasePrice = 25000,
             ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2763,16 +2843,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt & tương đen",
-            PortionDescription = "1 phần (10 viên)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t & tÆ°Æ¡ng Ä‘en",
+            PortionDescription = "1 pháº§n (10 viÃªn)"
         });
         products.Add(new Product
         {
             CategoryId = catVienChien.Id,
-            Name = "Bò Viên Chiên Gân Giòn",
+            Name = "BÃ² ViÃªn ChiÃªn GÃ¢n GiÃ²n",
             Slug = "bo-vien-chien-gan-gion",
             ProductType = "FOOD",
-            Description = "Bò viên gân giòn sần sật, thơm ngậy mùi tiêu đen và bò tươi chiên nóng sốt.",
+            Description = "BÃ² viÃªn gÃ¢n giÃ²n sáº§n sáº­t, thÆ¡m ngáº­y mÃ¹i tiÃªu Ä‘en vÃ  bÃ² tÆ°Æ¡i chiÃªn nÃ³ng sá»‘t.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2780,16 +2860,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương đen sa tế",
-            PortionDescription = "1 phần (8 viên)"
+            DefaultSauce = "TÆ°Æ¡ng Ä‘en sa táº¿",
+            PortionDescription = "1 pháº§n (8 viÃªn)"
         });
         products.Add(new Product
         {
             CategoryId = catVienChien.Id,
-            Name = "Tôm Viên Chiên Giòn Rụm",
+            Name = "TÃ´m ViÃªn ChiÃªn GiÃ²n Rá»¥m",
             Slug = "tom-vien-chien-gion-rum",
             ProductType = "FOOD",
-            Description = "Thịt tôm tươi xay nhuyễn tạo nên viên tôm thơm ngậy vị ngọt hải sản.",
+            Description = "Thá»‹t tÃ´m tÆ°Æ¡i xay nhuyá»…n táº¡o nÃªn viÃªn tÃ´m thÆ¡m ngáº­y vá»‹ ngá»t háº£i sáº£n.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2797,16 +2877,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Sốt bơ trứng & tương ớt",
-            PortionDescription = "1 phần (8 viên)"
+            DefaultSauce = "Sá»‘t bÆ¡ trá»©ng & tÆ°Æ¡ng á»›t",
+            PortionDescription = "1 pháº§n (8 viÃªn)"
         });
         products.Add(new Product
         {
             CategoryId = catVienChien.Id,
-            Name = "Mực Viên Chiên Nóng",
+            Name = "Má»±c ViÃªn ChiÃªn NÃ³ng",
             Slug = "muc-vien-chien-nong",
             ProductType = "FOOD",
-            Description = "Mực viên dai ngọt đậm đà vị biển, chiên vàng giòn ráo dầu.",
+            Description = "Má»±c viÃªn dai ngá»t Ä‘áº­m Ä‘Ã  vá»‹ biá»ƒn, chiÃªn vÃ ng giÃ²n rÃ¡o dáº§u.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2814,16 +2894,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt cay nồng",
-            PortionDescription = "1 phần (8 viên)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t cay ná»“ng",
+            PortionDescription = "1 pháº§n (8 viÃªn)"
         });
         products.Add(new Product
         {
             CategoryId = catVienChien.Id,
-            Name = "Hồ Lô Nướng / Chiên Giòn",
+            Name = "Há»“ LÃ´ NÆ°á»›ng / ChiÃªn GiÃ²n",
             Slug = "ho-lo-nuong-chien-gion",
             ProductType = "FOOD",
-            Description = "Hồ lô thịt tươi ngọt thơm mỡ màng, chiên giòn vỏ bên ngoài mọng nước bên trong.",
+            Description = "Há»“ lÃ´ thá»‹t tÆ°Æ¡i ngá»t thÆ¡m má»¡ mÃ ng, chiÃªn giÃ²n vá» bÃªn ngoÃ i má»ng nÆ°á»›c bÃªn trong.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2831,16 +2911,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương đen & tương ớt xào sa tế",
-            PortionDescription = "1 phần (8 viên hồ lô)"
+            DefaultSauce = "TÆ°Æ¡ng Ä‘en & tÆ°Æ¡ng á»›t xÃ o sa táº¿",
+            PortionDescription = "1 pháº§n (8 viÃªn há»“ lÃ´)"
         });
         products.Add(new Product
         {
             CategoryId = catVienChien.Id,
-            Name = "Phô Mai Viên Chiên Giòn Tan",
+            Name = "PhÃ´ Mai ViÃªn ChiÃªn GiÃ²n Tan",
             Slug = "pho-mai-vien-chien-gion-tan",
             ProductType = "FOOD",
-            Description = "Lớp vỏ ngoài giòn rụm bao bọc nhân phô mai béo ngậy chảy tràn khi cắn.",
+            Description = "Lá»›p vá» ngoÃ i giÃ²n rá»¥m bao bá»c nhÃ¢n phÃ´ mai bÃ©o ngáº­y cháº£y trÃ n khi cáº¯n.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2848,18 +2928,18 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Sốt bơ tỏi & tương ớt ngọt",
-            PortionDescription = "1 phần (6 viên)"
+            DefaultSauce = "Sá»‘t bÆ¡ tá»i & tÆ°Æ¡ng á»›t ngá»t",
+            PortionDescription = "1 pháº§n (6 viÃªn)"
         });
 
-        // --- 5.3 Category 2.2: Gà và các món chân gà ---
+        // --- 5.3 Category 2.2: GÃ  vÃ  cÃ¡c mÃ³n chÃ¢n gÃ  ---
         products.Add(new Product
         {
             CategoryId = catGaChanGa.Id,
-            Name = "Chân Gà Rút Xương Sốt Thái Cay Giòn",
+            Name = "ChÃ¢n GÃ  RÃºt XÆ°Æ¡ng Sá»‘t ThÃ¡i Cay GiÃ²n",
             Slug = "chan-ga-rut-xuong-sot-thai-cay-gion",
             ProductType = "FOOD",
-            Description = "Chân gà tươi rút xương giòn sần sật thấm đẫm sốt Thái cay nồng đậm vị, xoài xanh non, cóc bao tử và sả tắc ngập tràn hương thơm quyến rũ.",
+            Description = "ChÃ¢n gÃ  tÆ°Æ¡i rÃºt xÆ°Æ¡ng giÃ²n sáº§n sáº­t tháº¥m Ä‘áº«m sá»‘t ThÃ¡i cay ná»“ng Ä‘áº­m vá»‹, xoÃ i xanh non, cÃ³c bao tá»­ vÃ  sáº£ táº¯c ngáº­p trÃ n hÆ°Æ¡ng thÆ¡m quyáº¿n rÅ©.",
             BasePrice = 69000,
             ImageUrl = "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2869,16 +2949,16 @@ public static class DbInitializer
             AllowSpicyCustomization = true,
             SpicyLevel = 3,
             AllowSauceCustomization = true,
-            DefaultSauce = "Nước sốt Thái đặc chế chua cay",
-            PortionDescription = "1 phần (khoảng 350g kèm xoài cóc bao tử)"
+            DefaultSauce = "NÆ°á»›c sá»‘t ThÃ¡i Ä‘áº·c cháº¿ chua cay",
+            PortionDescription = "1 pháº§n (khoáº£ng 350g kÃ¨m xoÃ i cÃ³c bao tá»­)"
         });
         products.Add(new Product
         {
             CategoryId = catGaChanGa.Id,
-            Name = "Chân Gà Ngâm Sả Tắc Truyền Thống",
+            Name = "ChÃ¢n GÃ  NgÃ¢m Sáº£ Táº¯c Truyá»n Thá»‘ng",
             Slug = "chan-ga-ngam-sa-tac-truyen-thong",
             ProductType = "FOOD",
-            Description = "Chân gà ngâm sả tắc giòn dai sần sật, hương thơm sả cây, lá chanh và vị chua thanh mát của tắc quả.",
+            Description = "ChÃ¢n gÃ  ngÃ¢m sáº£ táº¯c giÃ²n dai sáº§n sáº­t, hÆ°Æ¡ng thÆ¡m sáº£ cÃ¢y, lÃ¡ chanh vÃ  vá»‹ chua thanh mÃ¡t cá»§a táº¯c quáº£.",
             BasePrice = 65000,
             ImageUrl = "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2888,16 +2968,16 @@ public static class DbInitializer
             AllowSpicyCustomization = true,
             SpicyLevel = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Muối tiêu chanh ớt xanh",
-            PortionDescription = "1 phần (khoảng 350g)"
+            DefaultSauce = "Muá»‘i tiÃªu chanh á»›t xanh",
+            PortionDescription = "1 pháº§n (khoáº£ng 350g)"
         });
         products.Add(new Product
         {
             CategoryId = catGaChanGa.Id,
-            Name = "Cánh Gà Chiên Nước Mắm Tỏi Ớt",
+            Name = "CÃ¡nh GÃ  ChiÃªn NÆ°á»›c Máº¯m Tá»i á»št",
             Slug = "canh-ga-chien-nuoc-mam-toi-ot",
             ProductType = "FOOD",
-            Description = "Cánh gà chiên giòn tan phủ đều lớp nước mắm tỏi ớt kẹo ngọt thơm nức mũi, đậm đà khó cưỡng.",
+            Description = "CÃ¡nh gÃ  chiÃªn giÃ²n tan phá»§ Ä‘á»u lá»›p nÆ°á»›c máº¯m tá»i á»›t káº¹o ngá»t thÆ¡m ná»©c mÅ©i, Ä‘áº­m Ä‘Ã  khÃ³ cÆ°á»¡ng.",
             BasePrice = 58000,
             ImageUrl = "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2906,16 +2986,16 @@ public static class DbInitializer
             StockStatus = 1,
             AllowSpicyCustomization = true,
             SpicyLevel = 1,
-            DefaultSauce = "Sốt mắm tỏi kẹo",
-            PortionDescription = "1 phần (3 cánh lớn)"
+            DefaultSauce = "Sá»‘t máº¯m tá»i káº¹o",
+            PortionDescription = "1 pháº§n (3 cÃ¡nh lá»›n)"
         });
         products.Add(new Product
         {
             CategoryId = catGaChanGa.Id,
-            Name = "Gà Lắc Phô Mai Béo Ngậy",
+            Name = "GÃ  Láº¯c PhÃ´ Mai BÃ©o Ngáº­y",
             Slug = "ga-lac-pho-mai-beo-ngay",
             ProductType = "FOOD",
-            Description = "Thịt gà ức phi lê cắt miếng chiên vàng rụm lắc ngập bột phô mai béo ngọt thơm phức.",
+            Description = "Thá»‹t gÃ  á»©c phi lÃª cáº¯t miáº¿ng chiÃªn vÃ ng rá»¥m láº¯c ngáº­p bá»™t phÃ´ mai bÃ©o ngá»t thÆ¡m phá»©c.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1562967914-608f82629710?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2923,16 +3003,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt chua ngọt & Sốt mayonnaise",
-            PortionDescription = "1 phần (200g thịt gà viên)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t chua ngá»t & Sá»‘t mayonnaise",
+            PortionDescription = "1 pháº§n (200g thá»‹t gÃ  viÃªn)"
         });
         products.Add(new Product
         {
             CategoryId = catGaChanGa.Id,
-            Name = "Gà Popcorn Chiên Giòn",
+            Name = "GÃ  Popcorn ChiÃªn GiÃ²n",
             Slug = "ga-popcorn-chien-gion",
             ProductType = "FOOD",
-            Description = "Gà viên popcorn giòn rụm cắn vui tai, bên trong mọng nước mềm thơm.",
+            Description = "GÃ  viÃªn popcorn giÃ²n rá»¥m cáº¯n vui tai, bÃªn trong má»ng nÆ°á»›c má»m thÆ¡m.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1562967914-608f82629710?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2940,18 +3020,18 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương cà & tương ớt",
-            PortionDescription = "1 phần (khoảng 180g)"
+            DefaultSauce = "TÆ°Æ¡ng cÃ  & tÆ°Æ¡ng á»›t",
+            PortionDescription = "1 pháº§n (khoáº£ng 180g)"
         });
 
-        // --- 5.4 Category 2.3: Khoai tây & khoai lang ---
+        // --- 5.4 Category 2.3: Khoai tÃ¢y & khoai lang ---
         products.Add(new Product
         {
             CategoryId = catKhoai.Id,
-            Name = "Khoai Tây Lắc Phô Mai Đặc Biệt",
+            Name = "Khoai TÃ¢y Láº¯c PhÃ´ Mai Äáº·c Biá»‡t",
             Slug = "khoai-tay-lac-pho-mai-dac-biet",
             ProductType = "FOOD",
-            Description = "Khoai tây sợi vàng ươm nhập khẩu chiên giòn tan, phủ lớp bột phô mai Hàn Quốc thơm lừng ngậy béo khó quên.",
+            Description = "Khoai tÃ¢y sá»£i vÃ ng Æ°Æ¡m nháº­p kháº©u chiÃªn giÃ²n tan, phá»§ lá»›p bá»™t phÃ´ mai HÃ n Quá»‘c thÆ¡m lá»«ng ngáº­y bÃ©o khÃ³ quÃªn.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1576107232684-1279f3908594?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2959,16 +3039,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt & Mayonnaise",
-            PortionDescription = "1 phần tiêu chuẩn (250g)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t & Mayonnaise",
+            PortionDescription = "1 pháº§n tiÃªu chuáº©n (250g)"
         });
         products.Add(new Product
         {
             CategoryId = catKhoai.Id,
-            Name = "Khoai Tây Lắc Rong Biển Thơm Giòn",
+            Name = "Khoai TÃ¢y Láº¯c Rong Biá»ƒn ThÆ¡m GiÃ²n",
             Slug = "khoai-tay-lac-rong-bien-thom-gion",
             ProductType = "FOOD",
-            Description = "Sự kết hợp giữa vị mằn mặn của rong biển nướng và độ giòn rụm của khoai tây sợi tươi.",
+            Description = "Sá»± káº¿t há»£p giá»¯a vá»‹ máº±n máº·n cá»§a rong biá»ƒn nÆ°á»›ng vÃ  Ä‘á»™ giÃ²n rá»¥m cá»§a khoai tÃ¢y sá»£i tÆ°Æ¡i.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1576107232684-1279f3908594?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -2976,16 +3056,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt cay",
-            PortionDescription = "1 phần (250g)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t cay",
+            PortionDescription = "1 pháº§n (250g)"
         });
         products.Add(new Product
         {
             CategoryId = catKhoai.Id,
-            Name = "Khoai Lang Kén Nước Cốt Dừa",
+            Name = "Khoai Lang KÃ©n NÆ°á»›c Cá»‘t Dá»«a",
             Slug = "khoai-lang-ken-nuoc-cot-dua",
             ProductType = "FOOD",
-            Description = "Khoai lang kén bùi ngọt, dẻo thơm thoang thoảng mùi nước cốt dừa và mè đen béo ngậy.",
+            Description = "Khoai lang kÃ©n bÃ¹i ngá»t, dáº»o thÆ¡m thoang thoáº£ng mÃ¹i nÆ°á»›c cá»‘t dá»«a vÃ  mÃ¨ Ä‘en bÃ©o ngáº­y.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1576107232684-1279f3908594?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -2993,16 +3073,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = false,
-            DefaultSauce = "Tương ớt",
-            PortionDescription = "1 phần (12 kén)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t",
+            PortionDescription = "1 pháº§n (12 kÃ©n)"
         });
         products.Add(new Product
         {
             CategoryId = catKhoai.Id,
-            Name = "Khoai Tây Chiên Sốt Phô Mai Tan Chảy",
+            Name = "Khoai TÃ¢y ChiÃªn Sá»‘t PhÃ´ Mai Tan Cháº£y",
             Slug = "khoai-tay-chien-sot-pho-mai-tan-chay",
             ProductType = "FOOD",
-            Description = "Đĩa khoai tây chiên nóng hổi rưới ngập sốt cheddar cheese tan chảy béo mặn thơm ngất ngây.",
+            Description = "ÄÄ©a khoai tÃ¢y chiÃªn nÃ³ng há»•i rÆ°á»›i ngáº­p sá»‘t cheddar cheese tan cháº£y bÃ©o máº·n thÆ¡m ngáº¥t ngÃ¢y.",
             BasePrice = 42000,
             ImageUrl = "https://images.unsplash.com/photo-1576107232684-1279f3908594?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3010,18 +3090,18 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Sốt phô mai cheddar tan chảy",
-            PortionDescription = "1 phần lớn"
+            DefaultSauce = "Sá»‘t phÃ´ mai cheddar tan cháº£y",
+            PortionDescription = "1 pháº§n lá»›n"
         });
 
-        // --- 5.5 Category 2.4: Phô mai, xúc xích & đồ chiên khác ---
+        // --- 5.5 Category 2.4: PhÃ´ mai, xÃºc xÃ­ch & Ä‘á»“ chiÃªn khÃ¡c ---
         products.Add(new Product
         {
             CategoryId = catPhoMaiXucXich.Id,
-            Name = "Phô Mai Que Kéo Sợi Khổng Lồ",
+            Name = "PhÃ´ Mai Que KÃ©o Sá»£i Khá»•ng Lá»“",
             Slug = "pho-mai-que-keo-soi-khong-lo",
             ProductType = "FOOD",
-            Description = "Phô mai que Mozzarella hảo hạng chiên xù vàng ruộm, kéo sợi dài miên man béo thơm nức mũi.",
+            Description = "PhÃ´ mai que Mozzarella háº£o háº¡ng chiÃªn xÃ¹ vÃ ng ruá»™m, kÃ©o sá»£i dÃ i miÃªn man bÃ©o thÆ¡m ná»©c mÅ©i.",
             BasePrice = 36000,
             ImageUrl = "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3029,16 +3109,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương cà & Mayonnaise chua ngọt",
-            PortionDescription = "1 phần (4 que lớn)"
+            DefaultSauce = "TÆ°Æ¡ng cÃ  & Mayonnaise chua ngá»t",
+            PortionDescription = "1 pháº§n (4 que lá»›n)"
         });
         products.Add(new Product
         {
             CategoryId = catPhoMaiXucXich.Id,
-            Name = "Xúc Xích Lốc Xoáy Chiên Giòn",
+            Name = "XÃºc XÃ­ch Lá»‘c XoÃ¡y ChiÃªn GiÃ²n",
             Slug = "xuc-xich-loc-xoay-chien-gion",
             ProductType = "FOOD",
-            Description = "Xúc xích Đức xông khói cắt lốc xoáy tẩm bột chiên giòn rụm bên ngoài mọng nước bên trong.",
+            Description = "XÃºc xÃ­ch Äá»©c xÃ´ng khÃ³i cáº¯t lá»‘c xoÃ¡y táº©m bá»™t chiÃªn giÃ²n rá»¥m bÃªn ngoÃ i má»ng nÆ°á»›c bÃªn trong.",
             BasePrice = 28000,
             ImageUrl = "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -3046,16 +3126,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt & tương cà",
-            PortionDescription = "1 cây lớn"
+            DefaultSauce = "TÆ°Æ¡ng á»›t & tÆ°Æ¡ng cÃ ",
+            PortionDescription = "1 cÃ¢y lá»›n"
         });
         products.Add(new Product
         {
             CategoryId = catPhoMaiXucXich.Id,
-            Name = "Nem Chua Rán Hà Nội Chuẩn Vị",
+            Name = "Nem Chua RÃ¡n HÃ  Ná»™i Chuáº©n Vá»‹",
             Slug = "nem-chua-ran-ha-noi-chuan-vi",
             ProductType = "FOOD",
-            Description = "Nem chua rán Hà Nội lăn bột chiên xù giòn rụm bên ngoài dẻo dính bên trong, ăn kèm dưa chuột tươi và tương ớt cay ngọt.",
+            Description = "Nem chua rÃ¡n HÃ  Ná»™i lÄƒn bá»™t chiÃªn xÃ¹ giÃ²n rá»¥m bÃªn ngoÃ i dáº»o dÃ­nh bÃªn trong, Äƒn kÃ¨m dÆ°a chuá»™t tÆ°Æ¡i vÃ  tÆ°Æ¡ng á»›t cay ngá»t.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3063,16 +3143,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt Hà Nội chua cay",
-            PortionDescription = "1 phần (6 chiếc)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t HÃ  Ná»™i chua cay",
+            PortionDescription = "1 pháº§n (6 chiáº¿c)"
         });
         products.Add(new Product
         {
             CategoryId = catPhoMaiXucXich.Id,
-            Name = "Há Cảo Tôm Thịt Chiên Giòn",
+            Name = "HÃ¡ Cáº£o TÃ´m Thá»‹t ChiÃªn GiÃ²n",
             Slug = "ha-cao-tom-thit-chien-gion",
             ProductType = "FOOD",
-            Description = "Há cảo nhân tôm thịt đậm vị gói vỏ mỏng chiên vàng giòn rụm, chấm giấm đen hoặc tương ớt sa tế.",
+            Description = "HÃ¡ cáº£o nhÃ¢n tÃ´m thá»‹t Ä‘áº­m vá»‹ gÃ³i vá» má»ng chiÃªn vÃ ng giÃ²n rá»¥m, cháº¥m giáº¥m Ä‘en hoáº·c tÆ°Æ¡ng á»›t sa táº¿.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -3080,18 +3160,18 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Nước tương giấm đỏ xào sa tế",
-            PortionDescription = "1 phần (8 chiếc)"
+            DefaultSauce = "NÆ°á»›c tÆ°Æ¡ng giáº¥m Ä‘á» xÃ o sa táº¿",
+            PortionDescription = "1 pháº§n (8 chiáº¿c)"
         });
 
-        // --- 5.6 Category 2.5: Bánh tráng & các món trộn ---
+        // --- 5.6 Category 2.5: BÃ¡nh trÃ¡ng & cÃ¡c mÃ³n trá»™n ---
         products.Add(new Product
         {
             CategoryId = catBanhTrang.Id,
-            Name = "Bánh Tráng Trộn Milkyverse Đặc Biệt",
+            Name = "BÃ¡nh TrÃ¡ng Trá»™n Milkyverse Äáº·c Biá»‡t",
             Slug = "banh-trang-tron-milkyverse-dac-biet",
             ProductType = "FOOD",
-            Description = "Bánh tráng phơi sương dẻo mềm, ngập tràn topping: bò khô miếng, khô gà lá chanh, tép sấy, trứng cút lòng đào, xoài chua thái sợi, rau răm và nước sốt bò sa tế thơm cay bí truyền.",
+            Description = "BÃ¡nh trÃ¡ng phÆ¡i sÆ°Æ¡ng dáº»o má»m, ngáº­p trÃ n topping: bÃ² khÃ´ miáº¿ng, khÃ´ gÃ  lÃ¡ chanh, tÃ©p sáº¥y, trá»©ng cÃºt lÃ²ng Ä‘Ã o, xoÃ i chua thÃ¡i sá»£i, rau rÄƒm vÃ  nÆ°á»›c sá»‘t bÃ² sa táº¿ thÆ¡m cay bÃ­ truyá»n.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3101,16 +3181,16 @@ public static class DbInitializer
             AllowSpicyCustomization = true,
             SpicyLevel = 2,
             AllowSauceCustomization = true,
-            DefaultSauce = "Nước sốt bò sa tế đặc biệt",
-            PortionDescription = "1 phần lớn ngập topping"
+            DefaultSauce = "NÆ°á»›c sá»‘t bÃ² sa táº¿ Ä‘áº·c biá»‡t",
+            PortionDescription = "1 pháº§n lá»›n ngáº­p topping"
         });
         products.Add(new Product
         {
             CategoryId = catBanhTrang.Id,
-            Name = "Bánh Tráng Nướng Đà Lạt Trứng Thịt Xúc Xích",
+            Name = "BÃ¡nh TrÃ¡ng NÆ°á»›ng ÄÃ  Láº¡t Trá»©ng Thá»‹t XÃºc XÃ­ch",
             Slug = "banh-trang-nuong-da-lat-trung-thit-xuc-xich",
             ProductType = "FOOD",
-            Description = "'Pizza Việt Nam' nướng than hồng giòn rụm, phết trứng gà béo ngậy, hành hoa, ruốc thịt, xúc xích và sốt mayonnaise bơ trứng.",
+            Description = "'Pizza Viá»‡t Nam' nÆ°á»›ng than há»“ng giÃ²n rá»¥m, pháº¿t trá»©ng gÃ  bÃ©o ngáº­y, hÃ nh hoa, ruá»‘c thá»‹t, xÃºc xÃ­ch vÃ  sá»‘t mayonnaise bÆ¡ trá»©ng.",
             BasePrice = 30000,
             ImageUrl = "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3120,16 +3200,16 @@ public static class DbInitializer
             AllowSpicyCustomization = true,
             SpicyLevel = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Mayonnaise & tương ớt nướng",
-            PortionDescription = "1 chiếc bánh lớn"
+            DefaultSauce = "Mayonnaise & tÆ°Æ¡ng á»›t nÆ°á»›ng",
+            PortionDescription = "1 chiáº¿c bÃ¡nh lá»›n"
         });
         products.Add(new Product
         {
             CategoryId = catBanhTrang.Id,
-            Name = "Bánh Tráng Cuốn Bơ Sốt Me Tắc",
+            Name = "BÃ¡nh TrÃ¡ng Cuá»‘n BÆ¡ Sá»‘t Me Táº¯c",
             Slug = "banh-trang-cuon-bo-sot-me-tac",
             ProductType = "FOOD",
-            Description = "Từng cuộn bánh tráng dẻo thơm cuốn trứng cút, khô bò, tép sấy, hành phi giòn tan ngập trong sốt bơ béo ngậy và sốt me chua cay.",
+            Description = "Tá»«ng cuá»™n bÃ¡nh trÃ¡ng dáº»o thÆ¡m cuá»‘n trá»©ng cÃºt, khÃ´ bÃ², tÃ©p sáº¥y, hÃ nh phi giÃ²n tan ngáº­p trong sá»‘t bÆ¡ bÃ©o ngáº­y vÃ  sá»‘t me chua cay.",
             BasePrice = 35000,
             ImageUrl = "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3139,18 +3219,18 @@ public static class DbInitializer
             AllowSpicyCustomization = true,
             SpicyLevel = 2,
             AllowSauceCustomization = true,
-            DefaultSauce = "Sốt bơ trứng & sốt me cay",
-            PortionDescription = "1 phần (8 cuốn cắt khúc)"
+            DefaultSauce = "Sá»‘t bÆ¡ trá»©ng & sá»‘t me cay",
+            PortionDescription = "1 pháº§n (8 cuá»‘n cáº¯t khÃºc)"
         });
 
-        // --- 5.7 Category 2.6: Trứng chén & món trứng ---
+        // --- 5.7 Category 2.6: Trá»©ng chÃ©n & mÃ³n trá»©ng ---
         products.Add(new Product
         {
             CategoryId = catTrungChen.Id,
-            Name = "Trứng Chén Nướng Phô Mai Xúc Xích Pate",
+            Name = "Trá»©ng ChÃ©n NÆ°á»›ng PhÃ´ Mai XÃºc XÃ­ch Pate",
             Slug = "trung-chen-nuong-pho-mai-xuc-xich-pate",
             ProductType = "FOOD",
-            Description = "Chén sứ nướng than hoa nóng bỏng, 4 quả trứng cút tươi phủ đầy phô mai Mozzarella kéo sợi, xúc xích xông khói, pate thơm lừng và mỡ hành béo ngậy.",
+            Description = "ChÃ©n sá»© nÆ°á»›ng than hoa nÃ³ng bá»ng, 4 quáº£ trá»©ng cÃºt tÆ°Æ¡i phá»§ Ä‘áº§y phÃ´ mai Mozzarella kÃ©o sá»£i, xÃºc xÃ­ch xÃ´ng khÃ³i, pate thÆ¡m lá»«ng vÃ  má»¡ hÃ nh bÃ©o ngáº­y.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3160,16 +3240,16 @@ public static class DbInitializer
             AllowSpicyCustomization = true,
             SpicyLevel = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Nước sốt chua ngọt & muối tiêu tắc",
-            PortionDescription = "1 chén nướng nóng hổi"
+            DefaultSauce = "NÆ°á»›c sá»‘t chua ngá»t & muá»‘i tiÃªu táº¯c",
+            PortionDescription = "1 chÃ©n nÆ°á»›ng nÃ³ng há»•i"
         });
         products.Add(new Product
         {
             CategoryId = catTrungChen.Id,
-            Name = "Trứng Cút Lộn Xào Me Chua Ngọt",
+            Name = "Trá»©ng CÃºt Lá»™n XÃ o Me Chua Ngá»t",
             Slug = "trung-cut-lon-xao-me-chua-ngot",
             ProductType = "FOOD",
-            Description = "Trứng cút lộn bùi béo đảo trong nước sốt me kẹo chua ngọt sánh mịn, rắc thêm đậu phộng rang thơm nức và rau răm.",
+            Description = "Trá»©ng cÃºt lá»™n bÃ¹i bÃ©o Ä‘áº£o trong nÆ°á»›c sá»‘t me káº¹o chua ngá»t sÃ¡nh má»‹n, ráº¯c thÃªm Ä‘áº­u phá»™ng rang thÆ¡m ná»©c vÃ  rau rÄƒm.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3178,18 +3258,18 @@ public static class DbInitializer
             StockStatus = 1,
             AllowSpicyCustomization = true,
             SpicyLevel = 2,
-            DefaultSauce = "Sốt me chua ngọt sánh đặc",
-            PortionDescription = "1 đĩa (15 quả)"
+            DefaultSauce = "Sá»‘t me chua ngá»t sÃ¡nh Ä‘áº·c",
+            PortionDescription = "1 Ä‘Ä©a (15 quáº£)"
         });
 
-        // --- 5.8 Category 2.7: Mì & món cay 7 cấp độ ---
+        // --- 5.8 Category 2.7: MÃ¬ & mÃ³n cay 7 cáº¥p Ä‘á»™ ---
         products.Add(new Product
         {
             CategoryId = catMiCay.Id,
-            Name = "Mì Cay Hàn Quốc 7 Cấp Độ Hải Sản Thập Cẩm",
+            Name = "MÃ¬ Cay HÃ n Quá»‘c 7 Cáº¥p Äá»™ Háº£i Sáº£n Tháº­p Cáº©m",
             Slug = "mi-cay-han-quoc-7-cap-do-hai-san-thap-cam",
             ProductType = "FOOD",
-            Description = "Thố đá sôi sục nghi ngút khói với mì sợi Hàn Quốc dai giòn, tôm sú tươi, mực khoanh giòn ngọt, bò Mỹ cuộn, nấm kim châm và bắp cải tím trong nước súp kim chi cay tê tái chuẩn 7 cấp độ.",
+            Description = "Thá»‘ Ä‘Ã¡ sÃ´i sá»¥c nghi ngÃºt khÃ³i vá»›i mÃ¬ sá»£i HÃ n Quá»‘c dai giÃ²n, tÃ´m sÃº tÆ°Æ¡i, má»±c khoanh giÃ²n ngá»t, bÃ² Má»¹ cuá»™n, náº¥m kim chÃ¢m vÃ  báº¯p cáº£i tÃ­m trong nÆ°á»›c sÃºp kim chi cay tÃª tÃ¡i chuáº©n 7 cáº¥p Ä‘á»™.",
             BasePrice = 69000,
             ImageUrl = "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3198,15 +3278,15 @@ public static class DbInitializer
             StockStatus = 1,
             AllowSpicyCustomization = true,
             SpicyLevel = 3,
-            PortionDescription = "1 thố đá lớn đầy đủ tôm, mực, bò Mỹ, xúc xích"
+            PortionDescription = "1 thá»‘ Ä‘Ã¡ lá»›n Ä‘áº§y Ä‘á»§ tÃ´m, má»±c, bÃ² Má»¹, xÃºc xÃ­ch"
         });
         products.Add(new Product
         {
             CategoryId = catMiCay.Id,
-            Name = "Mì Cay Bò Mỹ Cuộn Nấm Kim Châm",
+            Name = "MÃ¬ Cay BÃ² Má»¹ Cuá»™n Náº¥m Kim ChÃ¢m",
             Slug = "mi-cay-bo-my-cuon-nam-kim-cham",
             ProductType = "FOOD",
-            Description = "Nước dùng cay chua ngọt kim chi cay xé lưỡi hòa quyện cùng từng dải thịt bò Mỹ mềm tan và nấm kim châm giòn sần sật.",
+            Description = "NÆ°á»›c dÃ¹ng cay chua ngá»t kim chi cay xÃ© lÆ°á»¡i hÃ²a quyá»‡n cÃ¹ng tá»«ng dáº£i thá»‹t bÃ² Má»¹ má»m tan vÃ  náº¥m kim chÃ¢m giÃ²n sáº§n sáº­t.",
             BasePrice = 65000,
             ImageUrl = "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3215,15 +3295,15 @@ public static class DbInitializer
             StockStatus = 1,
             AllowSpicyCustomization = true,
             SpicyLevel = 3,
-            PortionDescription = "1 thố đá bò Mỹ hảo hạng"
+            PortionDescription = "1 thá»‘ Ä‘Ã¡ bÃ² Má»¹ háº£o háº¡ng"
         });
         products.Add(new Product
         {
             CategoryId = catMiCay.Id,
-            Name = "Mì Trộn Xúc Xích Phô Mai Trứng Lòng Đào",
+            Name = "MÃ¬ Trá»™n XÃºc XÃ­ch PhÃ´ Mai Trá»©ng LÃ²ng ÄÃ o",
             Slug = "mi-tron-xuc-xich-pho-mai-trung-long-dao",
             ProductType = "FOOD",
-            Description = "Mì trộn Indomie sốt cay đậm đà, phủ trứng lòng đào béo ngậy, xúc xích rán và phô mai mozzarella kéo sợi thơm phức.",
+            Description = "MÃ¬ trá»™n Indomie sá»‘t cay Ä‘áº­m Ä‘Ã , phá»§ trá»©ng lÃ²ng Ä‘Ã o bÃ©o ngáº­y, xÃºc xÃ­ch rÃ¡n vÃ  phÃ´ mai mozzarella kÃ©o sá»£i thÆ¡m phá»©c.",
             BasePrice = 48000,
             ImageUrl = "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3232,17 +3312,17 @@ public static class DbInitializer
             StockStatus = 1,
             AllowSpicyCustomization = true,
             SpicyLevel = 2,
-            PortionDescription = "1 tô mì trộn lớn"
+            PortionDescription = "1 tÃ´ mÃ¬ trá»™n lá»›n"
         });
 
-        // --- 5.9 Category 2.8: Cơm & món no ---
+        // --- 5.9 Category 2.8: CÆ¡m & mÃ³n no ---
         products.Add(new Product
         {
             CategoryId = catComNo.Id,
-            Name = "Cơm Chiên Bò Kim Chi Trứng Ốp La",
+            Name = "CÆ¡m ChiÃªn BÃ² Kim Chi Trá»©ng á»p La",
             Slug = "com-chien-bo-kim-chi-trung-op-la",
             ProductType = "FOOD",
-            Description = "Cơm chiên hạt tơi vàng óng đảo cùng thịt bò Mỹ thái mỏng và kim chi cải thảo chua cay giòn tan, kèm trứng ốp la lòng đào và canh rong biển thanh mát.",
+            Description = "CÆ¡m chiÃªn háº¡t tÆ¡i vÃ ng Ã³ng Ä‘áº£o cÃ¹ng thá»‹t bÃ² Má»¹ thÃ¡i má»ng vÃ  kim chi cáº£i tháº£o chua cay giÃ²n tan, kÃ¨m trá»©ng á»‘p la lÃ²ng Ä‘Ã o vÃ  canh rong biá»ƒn thanh mÃ¡t.",
             BasePrice = 59000,
             ImageUrl = "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3251,30 +3331,30 @@ public static class DbInitializer
             StockStatus = 1,
             AllowSpicyCustomization = true,
             SpicyLevel = 1,
-            PortionDescription = "1 đĩa cơm đầy đặn kèm súp rong biển"
+            PortionDescription = "1 Ä‘Ä©a cÆ¡m Ä‘áº§y Ä‘áº·n kÃ¨m sÃºp rong biá»ƒn"
         });
         products.Add(new Product
         {
             CategoryId = catComNo.Id,
-            Name = "Cơm Chiên Hải Sản Hoàng Kim",
+            Name = "CÆ¡m ChiÃªn Háº£i Sáº£n HoÃ ng Kim",
             Slug = "com-chien-hai-san-hoang-kim",
             ProductType = "FOOD",
-            Description = "Hạt cơm được bao bọc lớp lòng đỏ trứng muối béo ngậy, chiên giòn cùng tôm tươi, mực giòn và đậu Hà Lan ngọt bùi.",
+            Description = "Háº¡t cÆ¡m Ä‘Æ°á»£c bao bá»c lá»›p lÃ²ng Ä‘á» trá»©ng muá»‘i bÃ©o ngáº­y, chiÃªn giÃ²n cÃ¹ng tÃ´m tÆ°Æ¡i, má»±c giÃ²n vÃ  Ä‘áº­u HÃ  Lan ngá»t bÃ¹i.",
             BasePrice = 62000,
             ImageUrl = "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
             IsNew = true,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "1 đĩa lớn"
+            PortionDescription = "1 Ä‘Ä©a lá»›n"
         });
         products.Add(new Product
         {
             CategoryId = catComNo.Id,
-            Name = "Kimbap Chiên Xù Giòn Rụm",
+            Name = "Kimbap ChiÃªn XÃ¹ GiÃ²n Rá»¥m",
             Slug = "kimbap-chien-xu-gion-rum",
             ProductType = "FOOD",
-            Description = "Cơm cuộn rong biển Hàn Quốc nhân thanh cua, trứng, xúc xích và dưa chuột lăn bột xù chiên vàng rụm chấm mayonnaise tương cà.",
+            Description = "CÆ¡m cuá»™n rong biá»ƒn HÃ n Quá»‘c nhÃ¢n thanh cua, trá»©ng, xÃºc xÃ­ch vÃ  dÆ°a chuá»™t lÄƒn bá»™t xÃ¹ chiÃªn vÃ ng rá»¥m cháº¥m mayonnaise tÆ°Æ¡ng cÃ .",
             BasePrice = 39000,
             ImageUrl = "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3282,18 +3362,18 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Mayonnaise & tương ớt tương cà",
-            PortionDescription = "1 cuộn lớn (10 khoanh)"
+            DefaultSauce = "Mayonnaise & tÆ°Æ¡ng á»›t tÆ°Æ¡ng cÃ ",
+            PortionDescription = "1 cuá»™n lá»›n (10 khoanh)"
         });
 
-        // --- 5.10 Category 2.9: Nội tạng nướng & món nướng ---
+        // --- 5.10 Category 2.9: Ná»™i táº¡ng nÆ°á»›ng & mÃ³n nÆ°á»›ng ---
         products.Add(new Product
         {
             CategoryId = catNoiTang.Id,
-            Name = "Lòng Non Nướng Sa Tế Cay Giòn Than Hoa",
+            Name = "LÃ²ng Non NÆ°á»›ng Sa Táº¿ Cay GiÃ²n Than Hoa",
             Slug = "long-non-nuong-sa-te-cay-gion-than-hoa",
             ProductType = "FOOD",
-            Description = "Lòng non tươi làm sạch kỹ càng, tẩm ướp sa tế cay cay đượm vị mật ong, nướng trên than hoa xì xèo vàng ươm giòn sần sật.",
+            Description = "LÃ²ng non tÆ°Æ¡i lÃ m sáº¡ch ká»¹ cÃ ng, táº©m Æ°á»›p sa táº¿ cay cay Ä‘Æ°á»£m vá»‹ máº­t ong, nÆ°á»›ng trÃªn than hoa xÃ¬ xÃ¨o vÃ ng Æ°Æ¡m giÃ²n sáº§n sáº­t.",
             BasePrice = 68000,
             ImageUrl = "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3303,16 +3383,16 @@ public static class DbInitializer
             AllowSpicyCustomization = true,
             SpicyLevel = 3,
             AllowSauceCustomization = true,
-            DefaultSauce = "Muối ớt xanh chua cay & mắm nêm",
-            PortionDescription = "1 đĩa nướng nóng (300g kèm dưa leo, rau răm)"
+            DefaultSauce = "Muá»‘i á»›t xanh chua cay & máº¯m nÃªm",
+            PortionDescription = "1 Ä‘Ä©a nÆ°á»›ng nÃ³ng (300g kÃ¨m dÆ°a leo, rau rÄƒm)"
         });
         products.Add(new Product
         {
             CategoryId = catNoiTang.Id,
-            Name = "Dồi Sụn Nướng Than Hoa Giòn Rụm",
+            Name = "Dá»“i Sá»¥n NÆ°á»›ng Than Hoa GiÃ²n Rá»¥m",
             Slug = "doi-sun-nuong-than-hoa-gion-rum",
             ProductType = "FOOD",
-            Description = "Dồi sụn thịt heo thơm nức mùi húng quế và hành hoa, sụn giòn sần sật bên trong nướng vàng ươm lớp vỏ ngoài.",
+            Description = "Dá»“i sá»¥n thá»‹t heo thÆ¡m ná»©c mÃ¹i hÃºng quáº¿ vÃ  hÃ nh hoa, sá»¥n giÃ²n sáº§n sáº­t bÃªn trong nÆ°á»›ng vÃ ng Æ°Æ¡m lá»›p vá» ngoÃ i.",
             BasePrice = 55000,
             ImageUrl = "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3320,16 +3400,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt cay & sốt me",
-            PortionDescription = "1 phần (6 khoanh dài)"
+            DefaultSauce = "TÆ°Æ¡ng á»›t cay & sá»‘t me",
+            PortionDescription = "1 pháº§n (6 khoanh dÃ i)"
         });
         products.Add(new Product
         {
             CategoryId = catNoiTang.Id,
-            Name = "Sụn Gà Chiên Nước Mắm / Rang Muối Hồng Kông",
+            Name = "Sá»¥n GÃ  ChiÃªn NÆ°á»›c Máº¯m / Rang Muá»‘i Há»“ng KÃ´ng",
             Slug = "sun-ga-chien-nuoc-mam-rang-muoi-hong-kong",
             ProductType = "FOOD",
-            Description = "Sụn ức gà giòn sần sật rang muối Hồng Kông thơm ngát mùi sả gừng lá chanh giòn rụm khó quên.",
+            Description = "Sá»¥n á»©c gÃ  giÃ²n sáº§n sáº­t rang muá»‘i Há»“ng KÃ´ng thÆ¡m ngÃ¡t mÃ¹i sáº£ gá»«ng lÃ¡ chanh giÃ²n rá»¥m khÃ³ quÃªn.",
             BasePrice = 59000,
             ImageUrl = "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
@@ -3337,18 +3417,18 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Muối tiêu chanh ớt",
-            PortionDescription = "1 đĩa (khoảng 250g)"
+            DefaultSauce = "Muá»‘i tiÃªu chanh á»›t",
+            PortionDescription = "1 Ä‘Ä©a (khoáº£ng 250g)"
         });
 
-        // --- 5.11 Category 2.10: Ăn vặt bổ sung ---
+        // --- 5.11 Category 2.10: Ä‚n váº·t bá»• sung ---
         products.Add(new Product
         {
             CategoryId = catAnVatBoSung.Id,
-            Name = "Bắp Xào Bơ Tép Mỡ Hành Phô Mai",
+            Name = "Báº¯p XÃ o BÆ¡ TÃ©p Má»¡ HÃ nh PhÃ´ Mai",
             Slug = "bap-xao-bo-tep-mo-hanh-pho-mai",
             ProductType = "FOOD",
-            Description = "Bắp mỹ ngọt giòn xào cùng bơ Tường An thơm lừng, tép sấy đậm vị, hành hoa tươi và rắc phô mai kéo sợi dẻo dai béo ngậy.",
+            Description = "Báº¯p má»¹ ngá»t giÃ²n xÃ o cÃ¹ng bÆ¡ TÆ°á»ng An thÆ¡m lá»«ng, tÃ©p sáº¥y Ä‘áº­m vá»‹, hÃ nh hoa tÆ°Æ¡i vÃ  ráº¯c phÃ´ mai kÃ©o sá»£i dáº»o dai bÃ©o ngáº­y.",
             BasePrice = 32000,
             ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3356,16 +3436,16 @@ public static class DbInitializer
             IsActive = true,
             StockStatus = 1,
             AllowSauceCustomization = true,
-            DefaultSauce = "Tương ớt chua cay",
-            PortionDescription = "1 phần lớn nóng hổi"
+            DefaultSauce = "TÆ°Æ¡ng á»›t chua cay",
+            PortionDescription = "1 pháº§n lá»›n nÃ³ng há»•i"
         });
         products.Add(new Product
         {
             CategoryId = catAnVatBoSung.Id,
-            Name = "Bánh Gạo Tokbokki Cay Ngọt Sốt Phô Mai",
+            Name = "BÃ¡nh Gáº¡o Tokbokki Cay Ngá»t Sá»‘t PhÃ´ Mai",
             Slug = "banh-gao-tokbokki-cay-ngot-sot-pho-mai",
             ProductType = "FOOD",
-            Description = "Bánh gạo dẻo mềm Hàn Quốc đun trong sốt Gochujang cay ngọt đậm đà, ngập tràn chả cá, xúc xích và phô mai béo ngậy chảy tràn.",
+            Description = "BÃ¡nh gáº¡o dáº»o má»m HÃ n Quá»‘c Ä‘un trong sá»‘t Gochujang cay ngá»t Ä‘áº­m Ä‘Ã , ngáº­p trÃ n cháº£ cÃ¡, xÃºc xÃ­ch vÃ  phÃ´ mai bÃ©o ngáº­y cháº£y trÃ n.",
             BasePrice = 45000,
             ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
@@ -3374,219 +3454,219 @@ public static class DbInitializer
             StockStatus = 1,
             AllowSpicyCustomization = true,
             SpicyLevel = 2,
-            PortionDescription = "1 phần thố tokbokki đầy ắp"
+            PortionDescription = "1 pháº§n thá»‘ tokbokki Ä‘áº§y áº¯p"
         });
         products.Add(new Product
         {
             CategoryId = catAnVatBoSung.Id,
-            Name = "Khô Gà Lá Chanh Cay Xé Thơm Lừng",
+            Name = "KhÃ´ GÃ  LÃ¡ Chanh Cay XÃ© ThÆ¡m Lá»«ng",
             Slug = "kho-ga-la-chanh-cay-xe-thom-lung",
             ProductType = "FOOD",
-            Description = "Từng sợi thịt gà xé dai ngọt đượm vị mắm tỏi ớt cay nồng, thơm phức hương lá chanh tươi sấy giòn.",
+            Description = "Tá»«ng sá»£i thá»‹t gÃ  xÃ© dai ngá»t Ä‘Æ°á»£m vá»‹ máº¯m tá»i á»›t cay ná»“ng, thÆ¡m phá»©c hÆ°Æ¡ng lÃ¡ chanh tÆ°Æ¡i sáº¥y giÃ²n.",
             BasePrice = 38000,
             ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Hũ 150g"
+            PortionDescription = "HÅ© 150g"
         });
 
         // --- 5.12 Combos (Food + Drink) ---
                 var combo1 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo trà sữa và cá viên chiên",
+            Name = "Combo trÃ  sá»¯a vÃ  cÃ¡ viÃªn chiÃªn",
             Slug = "combo-tra-sua-va-ca-vien-chien",
             ProductType = "COMBO",
-            Description = "1 Ly Trà Sữa Truyền Thống trân châu đen size M + 1 Phần Cá Viên Chiên sốt tương đen sa tế nóng hổi giòn rụm.",
+            Description = "1 Ly TrÃ  Sá»¯a Truyá»n Thá»‘ng trÃ¢n chÃ¢u Ä‘en size M + 1 Pháº§n CÃ¡ ViÃªn ChiÃªn sá»‘t tÆ°Æ¡ng Ä‘en sa táº¿ nÃ³ng há»•i giÃ²n rá»¥m.",
             BasePrice = 72000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo trà sữa và cá viên chiên tiết kiệm"
+            PortionDescription = "Combo trÃ  sá»¯a vÃ  cÃ¡ viÃªn chiÃªn tiáº¿t kiá»‡m"
         };
         var combo2 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo trà sữa và khoai tây chiên",
+            Name = "Combo trÃ  sá»¯a vÃ  khoai tÃ¢y chiÃªn",
             Slug = "combo-tra-sua-va-khoai-tay-chien",
             ProductType = "COMBO",
-            Description = "1 Ly Trà Sữa Thái Xanh size M + 1 Phần Khoai Tây Chiên lắc phô mai giòn rụm thơm lừng.",
+            Description = "1 Ly TrÃ  Sá»¯a ThÃ¡i Xanh size M + 1 Pháº§n Khoai TÃ¢y ChiÃªn láº¯c phÃ´ mai giÃ²n rá»¥m thÆ¡m lá»«ng.",
             BasePrice = 68000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo trà sữa và khoai tây chiên tiết kiệm"
+            PortionDescription = "Combo trÃ  sá»¯a vÃ  khoai tÃ¢y chiÃªn tiáº¿t kiá»‡m"
         };
         var combo3 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo trà sữa và bánh tráng trộn",
+            Name = "Combo trÃ  sá»¯a vÃ  bÃ¡nh trÃ¡ng trá»™n",
             Slug = "combo-tra-sua-va-banh-trang-tron",
             ProductType = "COMBO",
-            Description = "1 Ly Trà Sữa Ô Long Nướng size M + 1 Phần Bánh Tráng Trộn bò khô tép sấy sốt sa tế đặc biệt.",
+            Description = "1 Ly TrÃ  Sá»¯a Ã” Long NÆ°á»›ng size M + 1 Pháº§n BÃ¡nh TrÃ¡ng Trá»™n bÃ² khÃ´ tÃ©p sáº¥y sá»‘t sa táº¿ Ä‘áº·c biá»‡t.",
             BasePrice = 69000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo trà sữa và bánh tráng trộn tiết kiệm"
+            PortionDescription = "Combo trÃ  sá»¯a vÃ  bÃ¡nh trÃ¡ng trá»™n tiáº¿t kiá»‡m"
         };
         var combo4 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo trà trái cây và chân gà sả tắc",
+            Name = "Combo trÃ  trÃ¡i cÃ¢y vÃ  chÃ¢n gÃ  sáº£ táº¯c",
             Slug = "combo-tra-trai-cay-va-chan-ga-sa-tac",
             ProductType = "COMBO",
-            Description = "1 Ly Trà Đào Cam Sả size L giải nhiệt + 1 Phần Chân Gà Sả Tắc giòn sần sật chua cay tê lưỡi.",
+            Description = "1 Ly TrÃ  ÄÃ o Cam Sáº£ size L giáº£i nhiá»‡t + 1 Pháº§n ChÃ¢n GÃ  Sáº£ Táº¯c giÃ²n sáº§n sáº­t chua cay tÃª lÆ°á»¡i.",
             BasePrice = 89000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = true,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo trà trái cây và chân gà sả tắc tiết kiệm"
+            PortionDescription = "Combo trÃ  trÃ¡i cÃ¢y vÃ  chÃ¢n gÃ  sáº£ táº¯c tiáº¿t kiá»‡m"
         };
         var combo5 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo trà sữa và phô mai que",
+            Name = "Combo trÃ  sá»¯a vÃ  phÃ´ mai que",
             Slug = "combo-tra-sua-va-pho-mai-que",
             ProductType = "COMBO",
-            Description = "1 Ly Trà Sữa Socola size M + 3 Cây Phô Mai Que kéo sợi ngập tràn chấm tương cà sốt bơ.",
+            Description = "1 Ly TrÃ  Sá»¯a Socola size M + 3 CÃ¢y PhÃ´ Mai Que kÃ©o sá»£i ngáº­p trÃ n cháº¥m tÆ°Æ¡ng cÃ  sá»‘t bÆ¡.",
             BasePrice = 72000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo trà sữa và phô mai que tiết kiệm"
+            PortionDescription = "Combo trÃ  sá»¯a vÃ  phÃ´ mai que tiáº¿t kiá»‡m"
         };
         var combo6 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo trà sữa và xúc xích chiên",
+            Name = "Combo trÃ  sá»¯a vÃ  xÃºc xÃ­ch chiÃªn",
             Slug = "combo-tra-sua-va-xuc-xich-chien",
             ProductType = "COMBO",
-            Description = "1 Ly Trà Sữa Trân Châu Hoàng Kim size M + 2 Cây Xúc Xích Đức chiên khía lốc xoáy nóng sốt.",
+            Description = "1 Ly TrÃ  Sá»¯a TrÃ¢n ChÃ¢u HoÃ ng Kim size M + 2 CÃ¢y XÃºc XÃ­ch Äá»©c chiÃªn khÃ­a lá»‘c xoÃ¡y nÃ³ng sá»‘t.",
             BasePrice = 65000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo trà sữa và xúc xích chiên tiết kiệm"
+            PortionDescription = "Combo trÃ  sá»¯a vÃ  xÃºc xÃ­ch chiÃªn tiáº¿t kiá»‡m"
         };
         var combo7 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo nước ép và đồ ăn vặt",
+            Name = "Combo nÆ°á»›c Ã©p vÃ  Ä‘á»“ Äƒn váº·t",
             Slug = "combo-nuoc-ep-va-do-an-vat",
             ProductType = "COMBO",
-            Description = "1 Ly Nước Ép Ổi Hồng nguyên chất giàu vitamin C + 1 Phần Nem Chua Rán phố cổ giòn rụm.",
+            Description = "1 Ly NÆ°á»›c Ã‰p á»”i Há»“ng nguyÃªn cháº¥t giÃ u vitamin C + 1 Pháº§n Nem Chua RÃ¡n phá»‘ cá»• giÃ²n rá»¥m.",
             BasePrice = 75000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo nước ép và đồ ăn vặt tiết kiệm"
+            PortionDescription = "Combo nÆ°á»›c Ã©p vÃ  Ä‘á»“ Äƒn váº·t tiáº¿t kiá»‡m"
         };
         var combo8 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo đồ uống và mì cay",
+            Name = "Combo Ä‘á»“ uá»‘ng vÃ  mÃ¬ cay",
             Slug = "combo-do-uong-va-mi-cay",
             ProductType = "COMBO",
-            Description = "1 Thố Mì Cay Hàn Quốc hải sản bò Mỹ cấp độ cay tùy chọn + 1 Ly Hồng Trà Macchiato mát lạnh chữa cay.",
+            Description = "1 Thá»‘ MÃ¬ Cay HÃ n Quá»‘c háº£i sáº£n bÃ² Má»¹ cáº¥p Ä‘á»™ cay tÃ¹y chá»n + 1 Ly Há»“ng TrÃ  Macchiato mÃ¡t láº¡nh chá»¯a cay.",
             BasePrice = 99000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = true,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo đồ uống và mì cay tiết kiệm"
+            PortionDescription = "Combo Ä‘á»“ uá»‘ng vÃ  mÃ¬ cay tiáº¿t kiá»‡m"
         };
         var combo9 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo đồ uống và cơm chiên",
+            Name = "Combo Ä‘á»“ uá»‘ng vÃ  cÆ¡m chiÃªn",
             Slug = "combo-do-uong-va-com-chien",
             ProductType = "COMBO",
-            Description = "1 Đĩa Cơm Chiên Kim Chi Trứng Lòng Đào thơm nức + 1 Ly Trà Tắc khổng lồ mát ruột chống ngấy.",
+            Description = "1 ÄÄ©a CÆ¡m ChiÃªn Kim Chi Trá»©ng LÃ²ng ÄÃ o thÆ¡m ná»©c + 1 Ly TrÃ  Táº¯c khá»•ng lá»“ mÃ¡t ruá»™t chá»‘ng ngáº¥y.",
             BasePrice = 95000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo đồ uống và cơm chiên tiết kiệm"
+            PortionDescription = "Combo Ä‘á»“ uá»‘ng vÃ  cÆ¡m chiÃªn tiáº¿t kiá»‡m"
         };
         var combo10 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo một người",
+            Name = "Combo má»™t ngÆ°á»i",
             Slug = "combo-mot-nguoi-solo-treat",
             ProductType = "COMBO",
-            Description = "Khẩu phần solo chuẩn vị: 1 Ly Trà Sữa MilkyVerse Signature size M + 1 Phần Hồ Lô Chiên giòn thơm.",
+            Description = "Kháº©u pháº§n solo chuáº©n vá»‹: 1 Ly TrÃ  Sá»¯a MilkyVerse Signature size M + 1 Pháº§n Há»“ LÃ´ ChiÃªn giÃ²n thÆ¡m.",
             BasePrice = 65000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo một người tiết kiệm"
+            PortionDescription = "Combo má»™t ngÆ°á»i tiáº¿t kiá»‡m"
         };
         var combo11 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo hai người",
+            Name = "Combo hai ngÆ°á»i",
             Slug = "combo-hai-nguoi-doi-ban-than",
             ProductType = "COMBO",
-            Description = "Bữa tiệc đôi bạn: 2 Ly Trà Sữa Tự Chọn size M + 1 Mẹt Viên Chiên Thập Cẩm + 1 Phần Khoai Tây Lắc Phô Mai.",
+            Description = "Bá»¯a tiá»‡c Ä‘Ã´i báº¡n: 2 Ly TrÃ  Sá»¯a Tá»± Chá»n size M + 1 Máº¹t ViÃªn ChiÃªn Tháº­p Cáº©m + 1 Pháº§n Khoai TÃ¢y Láº¯c PhÃ´ Mai.",
             BasePrice = 135000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = true,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo hai người tiết kiệm"
+            PortionDescription = "Combo hai ngÆ°á»i tiáº¿t kiá»‡m"
         };
         var combo12 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo nhóm bạn",
+            Name = "Combo nhÃ³m báº¡n",
             Slug = "combo-nhom-ban-party-sieu-vui",
             ProductType = "COMBO",
-            Description = "Party thịnh soạn 4 người: 4 Ly Đồ Uống Size L + 1 Mẹt Viên Chiên Lớn + 1 Hộp Chân Gà Sốt Thái + 2 Bánh Tráng Trộn.",
+            Description = "Party thá»‹nh soáº¡n 4 ngÆ°á»i: 4 Ly Äá»“ Uá»‘ng Size L + 1 Máº¹t ViÃªn ChiÃªn Lá»›n + 1 Há»™p ChÃ¢n GÃ  Sá»‘t ThÃ¡i + 2 BÃ¡nh TrÃ¡ng Trá»™n.",
             BasePrice = 260000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = true,
             IsNew = true,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo nhóm bạn tiết kiệm"
+            PortionDescription = "Combo nhÃ³m báº¡n tiáº¿t kiá»‡m"
         };
         var combo13 = new Product
         {
             CategoryId = catCombo.Id,
-            Name = "Combo tự chọn đồ uống và đồ ăn",
+            Name = "Combo tá»± chá»n Ä‘á»“ uá»‘ng vÃ  Ä‘á»“ Äƒn",
             Slug = "combo-tu-chon-do-uong-va-do-an",
             ProductType = "COMBO",
-            Description = "Tự do ghép đôi 1 món đồ uống bất kỳ (size M) và 1 món ăn vặt yêu thích với ưu đãi tiết kiệm 15%.",
+            Description = "Tá»± do ghÃ©p Ä‘Ã´i 1 mÃ³n Ä‘á»“ uá»‘ng báº¥t ká»³ (size M) vÃ  1 mÃ³n Äƒn váº·t yÃªu thÃ­ch vá»›i Æ°u Ä‘Ã£i tiáº¿t kiá»‡m 15%.",
             BasePrice = 85000,
             ImageUrl = "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&auto=format&fit=crop&q=80",
             IsBestSeller = false,
             IsNew = true,
             IsActive = true,
             StockStatus = 1,
-            PortionDescription = "Combo tự chọn đồ uống và đồ ăn tiết kiệm"
+            PortionDescription = "Combo tá»± chá»n Ä‘á»“ uá»‘ng vÃ  Ä‘á»“ Äƒn tiáº¿t kiá»‡m"
         };
         products.AddRange(new[] { combo1, combo2, combo3, combo4, combo5, combo6, combo7, combo8, combo9, combo10, combo11, combo12, combo13 });
 
@@ -3596,8 +3676,8 @@ public static class DbInitializer
         // ==========================================
         // 6. RECIPES FOR PRODUCTS (BOM / COSTING)
         // ==========================================
-        var r1M = new Recipe { ProductId = p1.Id, Size = "M", Notes = "Công thức chuẩn Size M" };
-        var r1L = new Recipe { ProductId = p1.Id, Size = "L", Notes = "Công thức chuẩn Size L" };
+        var r1M = new Recipe { ProductId = p1.Id, Size = "M", Notes = "CÃ´ng thá»©c chuáº©n Size M" };
+        var r1L = new Recipe { ProductId = p1.Id, Size = "L", Notes = "CÃ´ng thá»©c chuáº©n Size L" };
         context.Recipes.AddRange(r1M, r1L);
         await context.SaveChangesAsync();
 
@@ -3669,16 +3749,16 @@ public static class DbInitializer
         await context.SaveChangesAsync();
 
         // ==========================================
-        // 8. PURCHASE RECEIPTS (NHẬP KHO) & AUDIT
+        // 8. PURCHASE RECEIPTS (NHáº¬P KHO) & AUDIT
         // ==========================================
         var receipt1 = new PurchaseReceipt
         {
             ReceiptCode = "PNK" + DateTime.UtcNow.ToString("yyyyMMdd") + "-01",
-            SupplierName = "Công ty TNHH Thực Phẩm Tươi Sạch Hoàng Gia",
+            SupplierName = "CÃ´ng ty TNHH Thá»±c Pháº©m TÆ°Æ¡i Sáº¡ch HoÃ ng Gia",
             CreatedByUserId = warehouse.Id,
             TotalCost = 4500000,
             Status = "Completed",
-            Notes = "Nhập nguyên liệu tươi cho thực đơn đồ ăn và trà sữa tuần mới",
+            Notes = "Nháº­p nguyÃªn liá»‡u tÆ°Æ¡i cho thá»±c Ä‘Æ¡n Ä‘á»“ Äƒn vÃ  trÃ  sá»¯a tuáº§n má»›i",
             CreatedAt = DateTime.UtcNow.AddDays(-3)
         };
         context.PurchaseReceipts.Add(receipt1);
@@ -3720,7 +3800,7 @@ public static class DbInitializer
             AuditedByUserId = warehouse.Id,
             AuditDate = DateTime.UtcNow.AddDays(-1),
             Status = "Completed",
-            Notes = "Kiểm kê định kỳ đầu tuần - chênh lệch trong mức hao hụt chế biến cho phép"
+            Notes = "Kiá»ƒm kÃª Ä‘á»‹nh ká»³ Ä‘áº§u tuáº§n - chÃªnh lá»‡ch trong má»©c hao há»¥t cháº¿ biáº¿n cho phÃ©p"
         };
         context.StockAudits.Add(audit1);
         await context.SaveChangesAsync();
@@ -3733,7 +3813,7 @@ public static class DbInitializer
                 SystemQuantity = 30200,
                 ActualQuantity = 30000,
                 Variance = -200,
-                Reason = "Hao hụt tự nhiên khi đong rót pha chế"
+                Reason = "Hao há»¥t tá»± nhiÃªn khi Ä‘ong rÃ³t pha cháº¿"
             },
             new StockAuditItem
             {
@@ -3742,7 +3822,7 @@ public static class DbInitializer
                 SystemQuantity = 1200,
                 ActualQuantity = 1200,
                 Variance = 0,
-                Reason = "Số lượng khớp hoàn toàn"
+                Reason = "Sá»‘ lÆ°á»£ng khá»›p hoÃ n toÃ n"
             }
         );
         await context.SaveChangesAsync();
@@ -3754,7 +3834,7 @@ public static class DbInitializer
             new Promotion
             {
                 Code = "MILKYNEW",
-                Description = "Giảm 20% cho khách hàng mới trải nghiệm vũ trụ Milkyverse",
+                Description = "Giáº£m 20% cho khÃ¡ch hÃ ng má»›i tráº£i nghiá»‡m vÅ© trá»¥ Milkyverse",
                 DiscountPercent = 20,
                 DiscountAmount = 0,
                 MinOrderValue = 50000,
@@ -3767,7 +3847,7 @@ public static class DbInitializer
             new Promotion
             {
                 Code = "FREESHIP",
-                Description = "Miễn phí vận chuyển 15.000đ cho đơn hàng từ 99.000đ",
+                Description = "Miá»…n phÃ­ váº­n chuyá»ƒn 15.000Ä‘ cho Ä‘Æ¡n hÃ ng tá»« 99.000Ä‘",
                 DiscountPercent = 0,
                 DiscountAmount = 15000,
                 MinOrderValue = 99000,
@@ -3780,7 +3860,7 @@ public static class DbInitializer
             new Promotion
             {
                 Code = "COMBOANVAT",
-                Description = "Giảm thêm 25.000đ cho hóa đơn có món ăn vặt và trà sữa từ 150.000đ",
+                Description = "Giáº£m thÃªm 25.000Ä‘ cho hÃ³a Ä‘Æ¡n cÃ³ mÃ³n Äƒn váº·t vÃ  trÃ  sá»¯a tá»« 150.000Ä‘",
                 DiscountPercent = 0,
                 DiscountAmount = 25000,
                 MinOrderValue = 150000,
@@ -3796,7 +3876,7 @@ public static class DbInitializer
         // ==========================================
         // 10. REAL ORDERS WITH FOOD & COMBOS FOR ALL ROLES
         // ==========================================
-        // 10.1 Order 1: Completed order (Đã giao thành công)
+        // 10.1 Order 1: Completed order (ÄÃ£ giao thÃ nh cÃ´ng)
         var sampleOrder1 = new Order
         {
             OrderCode = "MV" + DateTime.UtcNow.ToString("yyyyMMdd") + "001",
@@ -3811,7 +3891,7 @@ public static class DbInitializer
             CustomerName = customer.FullName,
             CustomerPhone = customer.PhoneNumber,
             ShippingAddress = customer.Address,
-            Note = "Giao giờ hành chính, nhiều đá riêng, tương ớt thêm",
+            Note = "Giao giá» hÃ nh chÃ­nh, nhiá»u Ä‘Ã¡ riÃªng, tÆ°Æ¡ng á»›t thÃªm",
             CreatedAt = DateTime.UtcNow.AddHours(-4)
         };
         context.Orders.Add(sampleOrder1);
@@ -3829,35 +3909,35 @@ public static class DbInitializer
             UnitPrice = 52000,
             Quantity = 1,
             TotalPrice = 62000,
-            CustomNotes = "Ít ngọt thanh mát"
+            CustomNotes = "Ãt ngá»t thanh mÃ¡t"
         };
         var detail1_2 = new OrderDetail
         {
             OrderId = sampleOrder1.Id,
-            ProductName = "Cá Viên Chiên Thập Cẩm Mẹt Lớn",
+            ProductName = "CÃ¡ ViÃªn ChiÃªn Tháº­p Cáº©m Máº¹t Lá»›n",
             ItemType = "FOOD",
             Size = "Standard",
-            SpicyLevel = "Cay nhẹ (Cấp 1)",
-            DippingSauce = "Tương đen & Tương ớt xào tỏi",
-            PortionSize = "1 mẹt lớn",
+            SpicyLevel = "Cay nháº¹ (Cáº¥p 1)",
+            DippingSauce = "TÆ°Æ¡ng Ä‘en & TÆ°Æ¡ng á»›t xÃ o tá»i",
+            PortionSize = "1 máº¹t lá»›n",
             UnitPrice = 65000,
             Quantity = 1,
             TotalPrice = 65000,
-            CustomNotes = "Nhiều dưa leo và tương đen xào"
+            CustomNotes = "Nhiá»u dÆ°a leo vÃ  tÆ°Æ¡ng Ä‘en xÃ o"
         };
         var detail1_3 = new OrderDetail
         {
             OrderId = sampleOrder1.Id,
-            ProductName = "Bánh Tráng Trộn Milkyverse Đặc Biệt",
+            ProductName = "BÃ¡nh TrÃ¡ng Trá»™n Milkyverse Äáº·c Biá»‡t",
             ItemType = "FOOD",
             Size = "Standard",
-            SpicyLevel = "Cay vừa (Cấp 2)",
-            DippingSauce = "Sốt bò sa tế",
-            PortionSize = "Phần lớn",
+            SpicyLevel = "Cay vá»«a (Cáº¥p 2)",
+            DippingSauce = "Sá»‘t bÃ² sa táº¿",
+            PortionSize = "Pháº§n lá»›n",
             UnitPrice = 35000,
             Quantity = 1,
             TotalPrice = 35000,
-            CustomNotes = "Nhiều xoài và rau răm"
+            CustomNotes = "Nhiá»u xoÃ i vÃ  rau rÄƒm"
         };
         context.OrderDetails.AddRange(detail1_1, detail1_2, detail1_3);
         await context.SaveChangesAsync();
@@ -3872,14 +3952,14 @@ public static class DbInitializer
         });
 
         context.OrderStatusHistories.AddRange(
-            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Pending", Note = "Khách hàng đặt đơn thanh toán VietQR", CreatedAt = DateTime.UtcNow.AddHours(-4) },
-            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Confirmed", Note = "Quầy đã xác nhận đơn hàng", CreatedAt = DateTime.UtcNow.AddHours(-3).AddMinutes(50) },
-            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Preparing", Note = "Bếp & quầy đang làm món và pha chế", CreatedAt = DateTime.UtcNow.AddHours(-3).AddMinutes(40) },
-            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Delivering", Note = "Shipper nhận đơn và đang giao", CreatedAt = DateTime.UtcNow.AddHours(-3).AddMinutes(20) },
-            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Completed", Note = "Giao hàng thành công tới người nhận", CreatedAt = DateTime.UtcNow.AddHours(-3) }
+            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Pending", Note = "KhÃ¡ch hÃ ng Ä‘áº·t Ä‘Æ¡n thanh toÃ¡n VietQR", CreatedAt = DateTime.UtcNow.AddHours(-4) },
+            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Confirmed", Note = "Quáº§y Ä‘Ã£ xÃ¡c nháº­n Ä‘Æ¡n hÃ ng", CreatedAt = DateTime.UtcNow.AddHours(-3).AddMinutes(50) },
+            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Preparing", Note = "Báº¿p & quáº§y Ä‘ang lÃ m mÃ³n vÃ  pha cháº¿", CreatedAt = DateTime.UtcNow.AddHours(-3).AddMinutes(40) },
+            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Delivering", Note = "Shipper nháº­n Ä‘Æ¡n vÃ  Ä‘ang giao", CreatedAt = DateTime.UtcNow.AddHours(-3).AddMinutes(20) },
+            new OrderStatusHistory { OrderId = sampleOrder1.Id, Status = "Completed", Note = "Giao hÃ ng thÃ nh cÃ´ng tá»›i ngÆ°á»i nháº­n", CreatedAt = DateTime.UtcNow.AddHours(-3) }
         );
 
-        // 10.2 Order 2: In Delivering (Đang giao hàng - COD - phân công cho Shipper)
+        // 10.2 Order 2: In Delivering (Äang giao hÃ ng - COD - phÃ¢n cÃ´ng cho Shipper)
         var sampleOrder2 = new Order
         {
             OrderCode = "MV" + DateTime.UtcNow.ToString("yyyyMMdd") + "002",
@@ -3891,10 +3971,10 @@ public static class DbInitializer
             Status = "Delivering",
             PaymentStatus = "Pending",
             PaymentMethod = "COD",
-            CustomerName = "Trần Thị Mai Phương",
+            CustomerName = "Tráº§n Thá»‹ Mai PhÆ°Æ¡ng",
             CustomerPhone = "0933445566",
-            ShippingAddress = "Tòa nhà Bitexco, 2 Hải Triều, Bến Nghé, Quận 1, TP.HCM",
-            Note = "Gọi trước khi đến 5 phút, thanh toán COD tiền mặt",
+            ShippingAddress = "TÃ²a nhÃ  Bitexco, 2 Háº£i Triá»u, Báº¿n NghÃ©, Quáº­n 1, TP.HCM",
+            Note = "Gá»i trÆ°á»›c khi Ä‘áº¿n 5 phÃºt, thanh toÃ¡n COD tiá»n máº·t",
             CreatedAt = DateTime.UtcNow.AddMinutes(-45)
         };
         context.Orders.Add(sampleOrder2);
@@ -3903,21 +3983,21 @@ public static class DbInitializer
         var detail2_1 = new OrderDetail
         {
             OrderId = sampleOrder2.Id,
-            ProductName = "Chân Gà Rút Xương Sốt Thái Cay Giòn",
+            ProductName = "ChÃ¢n GÃ  RÃºt XÆ°Æ¡ng Sá»‘t ThÃ¡i Cay GiÃ²n",
             ItemType = "FOOD",
             Size = "Standard",
-            SpicyLevel = "Cay vừa (Cấp 3)",
-            DippingSauce = "Nước sốt Thái chua cay",
-            PortionSize = "1 phần lớn",
+            SpicyLevel = "Cay vá»«a (Cáº¥p 3)",
+            DippingSauce = "NÆ°á»›c sá»‘t ThÃ¡i chua cay",
+            PortionSize = "1 pháº§n lá»›n",
             UnitPrice = 69000,
             Quantity = 1,
             TotalPrice = 69000,
-            CustomNotes = "Nhiều cóc bao tử giòn"
+            CustomNotes = "Nhiá»u cÃ³c bao tá»­ giÃ²n"
         };
         var detail2_2 = new OrderDetail
         {
             OrderId = sampleOrder2.Id,
-            ProductName = "Trà Sữa Milkyverse Signature",
+            ProductName = "TrÃ  Sá»¯a Milkyverse Signature",
             ItemType = "DRINK",
             Size = "M",
             SugarLevel = "70%",
@@ -3925,16 +4005,16 @@ public static class DbInitializer
             UnitPrice = 45000,
             Quantity = 1,
             TotalPrice = 45000,
-            CustomNotes = "Chuẩn vị"
+            CustomNotes = "Chuáº©n vá»‹"
         };
         context.OrderDetails.AddRange(detail2_1, detail2_2);
         await context.SaveChangesAsync();
 
         context.OrderStatusHistories.AddRange(
-            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Pending", Note = "Đơn mới COD", CreatedAt = DateTime.UtcNow.AddMinutes(-45) },
-            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Confirmed", Note = "Quầy đã duyệt", CreatedAt = DateTime.UtcNow.AddMinutes(-40) },
-            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Preparing", Note = "Bếp chiên chân gà và quầy lắc trà", CreatedAt = DateTime.UtcNow.AddMinutes(-35) },
-            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Delivering", Note = "Bàn giao Shipper Hoàng Giao Hàng mang đi", CreatedAt = DateTime.UtcNow.AddMinutes(-15) }
+            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Pending", Note = "ÄÆ¡n má»›i COD", CreatedAt = DateTime.UtcNow.AddMinutes(-45) },
+            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Confirmed", Note = "Quáº§y Ä‘Ã£ duyá»‡t", CreatedAt = DateTime.UtcNow.AddMinutes(-40) },
+            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Preparing", Note = "Báº¿p chiÃªn chÃ¢n gÃ  vÃ  quáº§y láº¯c trÃ ", CreatedAt = DateTime.UtcNow.AddMinutes(-35) },
+            new OrderStatusHistory { OrderId = sampleOrder2.Id, Status = "Delivering", Note = "BÃ n giao Shipper HoÃ ng Giao HÃ ng mang Ä‘i", CreatedAt = DateTime.UtcNow.AddMinutes(-15) }
         );
 
         // Shipper assignment
@@ -3948,10 +4028,10 @@ public static class DbInitializer
             CodAmount = 129000,
             IsCodCollected = false,
             CodReconciled = false,
-            Notes = "Khách dặn đứng sảnh chờ tại Bitexco"
+            Notes = "KhÃ¡ch dáº·n Ä‘á»©ng sáº£nh chá» táº¡i Bitexco"
         });
 
-        // 10.3 Order 3: Pending Order (Chờ bếp / quầy xác nhận)
+        // 10.3 Order 3: Pending Order (Chá» báº¿p / quáº§y xÃ¡c nháº­n)
         var sampleOrder3 = new Order
         {
             OrderCode = "MV" + DateTime.UtcNow.ToString("yyyyMMdd") + "003",
@@ -3963,10 +4043,10 @@ public static class DbInitializer
             Status = "Pending",
             PaymentStatus = "Pending",
             PaymentMethod = "COD",
-            CustomerName = "Nguyễn Văn Hùng",
+            CustomerName = "Nguyá»…n VÄƒn HÃ¹ng",
             CustomerPhone = "0912348899",
-            ShippingAddress = "45 Nguyễn Thị Minh Khai, Phường Bến Nghé, Quận 1, TP.HCM",
-            Note = "Giao gấp trước 12h trưa",
+            ShippingAddress = "45 Nguyá»…n Thá»‹ Minh Khai, PhÆ°á»ng Báº¿n NghÃ©, Quáº­n 1, TP.HCM",
+            Note = "Giao gáº¥p trÆ°á»›c 12h trÆ°a",
             CreatedAt = DateTime.UtcNow.AddMinutes(-10)
         };
         context.Orders.Add(sampleOrder3);
@@ -3975,16 +4055,16 @@ public static class DbInitializer
         var detail3_1 = new OrderDetail
         {
             OrderId = sampleOrder3.Id,
-            ProductName = "Combo Siêu Cay: Mì Cay Hàn Quốc 7 Cấp Độ + Trà Ô Long Nướng Khói",
+            ProductName = "Combo SiÃªu Cay: MÃ¬ Cay HÃ n Quá»‘c 7 Cáº¥p Äá»™ + TrÃ  Ã” Long NÆ°á»›ng KhÃ³i",
             ItemType = "COMBO",
             Size = "Standard",
-            SpicyLevel = "Cấp độ 3 (Cay vừa)",
-            DippingSauce = "Muối ớt chanh",
-            PortionSize = "1 phần combo",
+            SpicyLevel = "Cáº¥p Ä‘á»™ 3 (Cay vá»«a)",
+            DippingSauce = "Muá»‘i á»›t chanh",
+            PortionSize = "1 pháº§n combo",
             UnitPrice = 109000,
             Quantity = 1,
             TotalPrice = 109000,
-            CustomNotes = "Mì cay cấp 3, trà ít ngọt 50%"
+            CustomNotes = "MÃ¬ cay cáº¥p 3, trÃ  Ã­t ngá»t 50%"
         };
         context.OrderDetails.Add(detail3_1);
 
@@ -3992,10 +4072,11 @@ public static class DbInitializer
         {
             OrderId = sampleOrder3.Id,
             Status = "Pending",
-            Note = "Đơn mới nhận trên hệ thống MilkyVerse",
+            Note = "ÄÆ¡n má»›i nháº­n trÃªn há»‡ thá»‘ng MilkyVerse",
             CreatedAt = DateTime.UtcNow.AddMinutes(-10)
         });
 
         await context.SaveChangesAsync();
     }
 }
+

@@ -20,6 +20,12 @@ public class OrdersController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
     {
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        if (!string.IsNullOrEmpty(role) && role != "Customer" && role != "Staff")
+        {
+            return BadRequest(ApiResponse<OrderResponse>.Fail($"Tài khoản vai trò '{role}' không có quyền đặt món. Chỉ tài khoản Khách hàng và Nhân viên mới có quyền đặt món."));
+        }
+
         int? userId = null;
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (int.TryParse(userIdStr, out var id))
@@ -88,6 +94,21 @@ public class OrdersController : ControllerBase
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateOrderStatusRequest request)
     {
         var result = await _orderService.UpdateOrderStatusAsync(id, request);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:int}/cancel")]
+    public async Task<IActionResult> CancelOrder(int id, [FromBody] CancelOrderRequest request)
+    {
+        int? userId = null;
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (int.TryParse(userIdStr, out var uId))
+        {
+            userId = uId;
+        }
+
+        var result = await _orderService.CancelOrderAsync(id, userId, request?.Reason ?? "Khách hàng tự hủy đơn trong vòng 2 phút");
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }

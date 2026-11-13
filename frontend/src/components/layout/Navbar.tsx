@@ -20,6 +20,9 @@ import {
   ChefHat,
   Boxes,
   Truck,
+  Home,
+  UtensilsCrossed,
+  ClipboardList,
 } from "lucide-react";
 
 export const Navbar: React.FC = () => {
@@ -34,24 +37,53 @@ export const Navbar: React.FC = () => {
     setMounted(true);
   }, []);
 
-  const navLinks = [
-    { label: "Trang Chủ", href: "/" },
-    { label: "Thực Đơn (Ăn & Uống)", href: "/menu" },
-    {
-      label: "DIY Studio",
-      href: "/diy",
-      badge: "Tự Phối",
-      icon: CupSoda,
-    },
-    {
-      label: "AI Barista",
-      href: "/ai-barista",
-      badge: "AI 2026",
-      icon: Bot,
-      highlight: true,
-    },
-    { label: "Tra Cứu Đơn", href: "/orders" },
-  ];
+  const isOperationalPage =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/warehouse") ||
+    pathname.startsWith("/delivery");
+
+  // Chỉ Khách Hàng và Nhân Viên mới được phép đặt món & thấy giỏ hàng
+  const canOrder = !user || user.role === "Customer" || user.role === "Staff";
+
+  // Navigation Links tuỳ chỉnh theo vai trò
+  let navLinks: { label: string; href: string; badge?: string; icon?: React.ComponentType<{ className?: string }>; highlight?: boolean }[] = [];
+
+  if (user?.role === "DeliveryStaff") {
+    navLinks = [
+      { label: "Bảng Giao Hàng", href: "/delivery", icon: Truck },
+    ];
+  } else if (user?.role === "WarehouseStaff") {
+    navLinks = [
+      { label: "Kho Hàng FEFO", href: "/warehouse", icon: Boxes },
+    ];
+  } else if (user?.role === "Admin" || user?.role === "Manager") {
+    navLinks = [
+      { label: "Admin Portal", href: "/admin", icon: ShieldAlert },
+      { label: "Quản Lý Đơn", href: "/admin/orders", icon: ShoppingBag },
+      { label: "Kho FEFO", href: "/warehouse", icon: Boxes },
+      { label: "Đội Giao Vận", href: "/delivery", icon: Truck },
+    ];
+  } else {
+    // Khách hàng, nhân viên hoặc khách vãng lai
+    navLinks = [
+      { label: "Trang Chủ", href: "/", icon: Home },
+      { label: "Thực Đơn", href: "/menu", icon: UtensilsCrossed },
+      {
+        label: "DIY Studio",
+        href: "/diy",
+        badge: "Tự Phối",
+        icon: CupSoda,
+      },
+      {
+        label: "AI Barista",
+        href: "/ai-barista",
+        badge: "AI 2026",
+        icon: Bot,
+        highlight: true,
+      },
+      { label: "Tra Cứu Đơn", href: "/orders", icon: ClipboardList },
+    ];
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#EFE6DC] transition-all">
@@ -93,17 +125,17 @@ export const Navbar: React.FC = () => {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                  className={`relative inline-flex items-center justify-center gap-2 h-10 px-3.5 rounded-xl text-sm font-semibold transition-all leading-none ${
                     isActive
                       ? "text-[#6F4E37] bg-[#F7D6D0]/40 shadow-sm"
                       : "text-[#2D2522] hover:text-[#6F4E37] hover:bg-[#FAF7F2]"
                   }`}
                 >
-                  {Icon && <Icon className={`w-4 h-4 ${item.highlight ? "text-[#6F4E37]" : ""}`} />}
-                  <span>{item.label}</span>
+                  {Icon && <Icon className={`w-4 h-4 shrink-0 ${item.highlight ? "text-[#6F4E37]" : ""}`} />}
+                  <span className="leading-none whitespace-nowrap">{item.label}</span>
                   {item.badge && (
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none flex items-center justify-center ${
                         item.highlight
                           ? "bg-[#6F4E37] text-white animate-subtle"
                           : "bg-[#F7D6D0] text-[#6F4E37]"
@@ -121,23 +153,34 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center gap-3">
             {/* Quick role shortcuts for logged-in staff */}
             {mounted && user && user.role !== "Customer" && (
-              <div className="hidden lg:flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-2xl border border-[#EFE6DC]">
-                {isStaff && (
-                  <Link
-                    href="/staff"
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${
-                      pathname === "/staff" ? "bg-[#6F4E37] text-white" : "text-[#6F4E37] hover:bg-white"
-                    }`}
-                    title="Bếp & Quầy POS"
-                  >
-                    <ChefHat className="w-3.5 h-3.5" />
-                    <span>Quầy & Bếp</span>
-                  </Link>
+              <div className="hidden lg:flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-2xl border border-[#EFE6DC] h-10">
+                {user.role === "Staff" && (
+                  <>
+                    <Link
+                      href="/counter"
+                      className={`h-8 px-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors leading-none ${
+                        pathname === "/counter" ? "bg-[#6F4E37] text-white" : "text-amber-800 hover:bg-white"
+                      }`}
+                      title="Phục Vụ Quầy & Thu Ngân POS"
+                    >
+                      <span>Quầy POS</span>
+                    </Link>
+                    <Link
+                      href="/staff"
+                      className={`h-8 px-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors leading-none ${
+                        pathname === "/staff" ? "bg-[#6F4E37] text-white" : "text-[#6F4E37] hover:bg-white"
+                      }`}
+                      title="Bếp & Barista Nấu Món"
+                    >
+                      <ChefHat className="w-3.5 h-3.5" />
+                      <span>Bếp Nấu</span>
+                    </Link>
+                  </>
                 )}
-                {isWarehouse && (
+                {user.role === "WarehouseStaff" && (
                   <Link
                     href="/warehouse"
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${
+                    className={`h-8 px-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors leading-none ${
                       pathname === "/warehouse" ? "bg-[#6F4E37] text-white" : "text-blue-700 hover:bg-white"
                     }`}
                     title="Kho Hàng FEFO"
@@ -146,10 +189,10 @@ export const Navbar: React.FC = () => {
                     <span>Kho FEFO</span>
                   </Link>
                 )}
-                {isDelivery && (
+                {user.role === "DeliveryStaff" && (
                   <Link
                     href="/delivery"
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${
+                    className={`h-8 px-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors leading-none ${
                       pathname === "/delivery" ? "bg-[#6F4E37] text-white" : "text-emerald-700 hover:bg-white"
                     }`}
                     title="Đội Giao Hàng Shipper"
@@ -159,45 +202,62 @@ export const Navbar: React.FC = () => {
                   </Link>
                 )}
                 {isManager && (
-                  <Link
-                    href="/admin"
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 transition-colors ${
-                      pathname.startsWith("/admin") ? "bg-[#6F4E37] text-white" : "text-purple-700 hover:bg-white"
-                    }`}
-                    title="Manager / Admin Portal"
-                  >
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                    <span>Quản Lý</span>
-                  </Link>
+                  <>
+                    <Link
+                      href="/counter"
+                      className={`h-8 px-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors leading-none ${
+                        pathname === "/counter" ? "bg-[#6F4E37] text-white" : "text-amber-800 hover:bg-white"
+                      }`}
+                      title="Phục Vụ Quầy & Thu Ngân POS"
+                    >
+                      <span>Quầy POS</span>
+                    </Link>
+                    <Link
+                      href="/admin"
+                      className={`h-8 px-2.5 rounded-xl text-xs font-bold inline-flex items-center gap-1 transition-colors leading-none ${
+                        pathname.startsWith("/admin") ? "bg-[#6F4E37] text-white" : "text-purple-700 hover:bg-white"
+                      }`}
+                      title="Manager / Admin Portal"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>Quản Lý</span>
+                    </Link>
+                  </>
                 )}
               </div>
             )}
 
-            {/* Cart Button */}
-            <Link
-              href="/cart"
-              className="relative p-2.5 rounded-xl bg-white border border-[#EFE6DC] text-[#4A3324] hover:bg-[#FAF7F2] transition-colors shadow-sm flex items-center"
-              title="Xem giỏ hàng"
-            >
-              <ShoppingBag className="w-5 h-5 text-[#6F4E37]" />
-              {mounted && cartCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-[#6F4E37] text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md animate-scale">
-                  {cartCount}
-                </span>
-              )}
-            </Link>
+            {/* Cart Button: Chỉ hiển thị cho Khách Hàng và Nhân Viên, ẩn hoàn toàn trên trang Shipper/Kho/Admin */}
+            {mounted && canOrder && !isOperationalPage && (
+              <Link
+                href="/cart"
+                className="relative h-10 w-10 rounded-xl bg-white border border-[#EFE6DC] text-[#4A3324] hover:bg-[#FAF7F2] transition-colors shadow-sm flex items-center justify-center shrink-0"
+                title="Xem giỏ hàng"
+              >
+                <ShoppingBag className="w-5 h-5 text-[#6F4E37]" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-[#6F4E37] text-white text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-md animate-scale leading-none">
+                    {cartCount}
+                  </span>
+                )}
+              </Link>
+            )}
 
             {/* Auth section */}
             {mounted && user ? (
               <div className="relative">
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-[#EFE6DC] text-sm font-medium text-[#2D2522] hover:bg-[#FAF7F2] transition-all shadow-sm"
+                  className="h-10 flex items-center gap-2 px-3 rounded-xl bg-white border border-[#EFE6DC] text-sm font-medium text-[#2D2522] hover:bg-[#FAF7F2] transition-all shadow-sm shrink-0 leading-none"
                 >
-                  <div className="w-7 h-7 rounded-full bg-[#6F4E37] text-white flex items-center justify-center font-bold text-xs">
-                    {user.fullName.charAt(0).toUpperCase()}
+                  <div className="w-7 h-7 rounded-full overflow-hidden bg-[#6F4E37] text-white flex items-center justify-center font-bold text-xs shrink-0 border border-[#FAF7F2]">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt={user.fullName} className="w-full h-full object-cover" />
+                    ) : (
+                      user.fullName.charAt(0).toUpperCase()
+                    )}
                   </div>
-                  <span className="hidden sm:inline-block max-w-[100px] truncate">
+                  <span className="hidden sm:inline-block max-w-[100px] truncate text-xs font-bold leading-none">
                     {user.fullName}
                   </span>
                 </button>
@@ -213,6 +273,15 @@ export const Navbar: React.FC = () => {
                       </span>
                     </div>
 
+                    <Link
+                      href="/profile"
+                      onClick={() => setUserDropdownOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-[#2D2522] font-semibold hover:bg-[#FAF7F2]"
+                    >
+                      <UserIcon className="w-4 h-4 text-[#6F4E37]" />
+                      <span>Sửa thông tin & Avatar</span>
+                    </Link>
+
                     {isManager && (
                       <Link
                         href="/admin"
@@ -224,18 +293,28 @@ export const Navbar: React.FC = () => {
                       </Link>
                     )}
 
-                    {isStaff && (
-                      <Link
-                        href="/staff"
-                        onClick={() => setUserDropdownOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 text-[#2D2522] font-semibold hover:bg-[#FAF7F2]"
-                      >
-                        <ChefHat className="w-4 h-4 text-orange-600" />
-                        <span>Quầy & Bếp Order POS</span>
-                      </Link>
+                    {(user.role === "Staff" || isManager) && (
+                      <>
+                        <Link
+                          href="/counter"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-[#2D2522] font-semibold hover:bg-[#FAF7F2]"
+                        >
+                          <ShoppingBag className="w-4 h-4 text-amber-700" />
+                          <span>Phục Vụ Quầy POS</span>
+                        </Link>
+                        <Link
+                          href="/staff"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2 px-4 py-2 text-[#2D2522] font-semibold hover:bg-[#FAF7F2]"
+                        >
+                          <ChefHat className="w-4 h-4 text-orange-600" />
+                          <span>Bếp Nấu & Pha Chế</span>
+                        </Link>
+                      </>
                     )}
 
-                    {isWarehouse && (
+                    {user.role === "WarehouseStaff" && (
                       <Link
                         href="/warehouse"
                         onClick={() => setUserDropdownOpen(false)}
@@ -246,7 +325,7 @@ export const Navbar: React.FC = () => {
                       </Link>
                     )}
 
-                    {isDelivery && (
+                    {user.role === "DeliveryStaff" && (
                       <Link
                         href="/delivery"
                         onClick={() => setUserDropdownOpen(false)}
@@ -283,16 +362,16 @@ export const Navbar: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Link
                   href="/auth/register"
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#6F4E37]/30 text-[#6F4E37] font-semibold text-sm hover:bg-[#6F4E37]/10 transition-all"
+                  className="h-10 hidden sm:inline-flex items-center gap-1.5 px-3.5 rounded-xl border border-[#6F4E37]/30 text-[#6F4E37] font-semibold text-sm hover:bg-[#6F4E37]/10 transition-all leading-none shrink-0"
                 >
-                  <UserPlus className="w-4 h-4" />
+                  <UserPlus className="w-4 h-4 shrink-0" />
                   <span>Đăng Ký</span>
                 </Link>
                 <Link
                   href="/auth/login"
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#6F4E37] text-white font-semibold text-sm hover:bg-[#4A3324] transition-all shadow-md shadow-[#6F4E37]/20"
+                  className="h-10 inline-flex items-center gap-1.5 px-4 rounded-xl bg-[#6F4E37] text-white font-semibold text-sm hover:bg-[#4A3324] transition-all shadow-md shadow-[#6F4E37]/20 leading-none shrink-0"
                 >
-                  <UserIcon className="w-4 h-4" />
+                  <UserIcon className="w-4 h-4 shrink-0" />
                   <span>Đăng Nhập</span>
                 </Link>
               </div>
@@ -353,7 +432,7 @@ export const Navbar: React.FC = () => {
 
             {mounted && user && (
               <div className="pt-2 border-t border-[#EFE6DC] space-y-1">
-                {isStaff && (
+                {user.role === "Staff" && (
                   <Link
                     href="/staff"
                     onClick={() => setMobileMenuOpen(false)}
@@ -363,7 +442,7 @@ export const Navbar: React.FC = () => {
                     <span>Quầy & Bếp Order POS</span>
                   </Link>
                 )}
-                {isWarehouse && (
+                {user.role === "WarehouseStaff" && (
                   <Link
                     href="/warehouse"
                     onClick={() => setMobileMenuOpen(false)}
@@ -373,7 +452,7 @@ export const Navbar: React.FC = () => {
                     <span>Kho Hàng & Lô FEFO</span>
                   </Link>
                 )}
-                {isDelivery && (
+                {user.role === "DeliveryStaff" && (
                   <Link
                     href="/delivery"
                     onClick={() => setMobileMenuOpen(false)}

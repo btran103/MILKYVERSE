@@ -26,6 +26,9 @@ public class User
     [MaxLength(255)]
     public string Address { get; set; } = string.Empty;
 
+    [MaxLength(500)]
+    public string? AvatarUrl { get; set; }
+
     [Required]
     [MaxLength(50)]
     public string Role { get; set; } = "Customer"; // Customer, Staff, Manager, WarehouseStaff, DeliveryStaff, Admin
@@ -418,6 +421,9 @@ public class Order
     [MaxLength(500)]
     public string Note { get; set; } = string.Empty;
 
+    [MaxLength(500)]
+    public string? CancelReason { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 
@@ -646,5 +652,36 @@ public class ChatMessage
 
     public string? SuggestedDrinkJson { get; set; }
 
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class ProductReview
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int ProductId { get; set; }
+    public Product? Product { get; set; }
+
+    public int UserId { get; set; }
+    public User? User { get; set; }
+
+    [Required]
+    [MaxLength(100)]
+    public string UserName { get; set; } = string.Empty;
+
+    public string? UserAvatar { get; set; }
+
+    [Range(1, 5)]
+    public int Rating { get; set; } = 5;
+
+    [MaxLength(50)]
+    public string Verdict { get; set; } = "Rất ngon";
+
+    [Required]
+    [MaxLength(1000)]
+    public string Comment { get; set; } = string.Empty;
+
+    public bool IsVerifiedPurchase { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

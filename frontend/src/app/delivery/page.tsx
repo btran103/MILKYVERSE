@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { ShipperDashboard } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { getDistinctOrderItemImage } from "@/lib/orderImageHelper";
 import {
   Truck,
   Phone,
@@ -296,15 +297,21 @@ export default function DeliveryStaffPage() {
                 <div className="space-y-1 text-xs">
                   <span className="font-bold text-[#786C65] uppercase text-[10px]">Món Cần Giao:</span>
                   <div className="divide-y divide-gray-100">
-                    {order.items.map((it, idx) => (
-                      <div key={idx} className="py-1 flex items-center justify-between">
-                        <span className="font-semibold text-[#2D2522]">
-                          • {it.productName} ({it.portionSize || it.size})
-                          {it.spicyLevel && ` - ${it.spicyLevel}`}
-                        </span>
-                        <span className="font-bold text-[#6F4E37]">x{it.quantity}</span>
-                      </div>
-                    ))}
+                    {order.items.map((it, idx) => {
+                      const itImg = getDistinctOrderItemImage(it, idx);
+                      return (
+                        <div key={idx} className="py-1.5 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <img src={itImg} alt={it.productName} className="w-7 h-7 rounded-lg object-cover shrink-0 border border-[#EFE6DC]" />
+                            <span className="font-semibold text-[#2D2522] truncate">
+                              {it.productName} ({it.portionSize || it.size})
+                              {it.spicyLevel && ` - ${it.spicyLevel}`}
+                            </span>
+                          </div>
+                          <span className="font-bold text-[#6F4E37] shrink-0">x{it.quantity}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

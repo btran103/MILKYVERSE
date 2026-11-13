@@ -1,0 +1,273 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "search_menu",
+      "description": "Tìm/lọc món trên thực đơn MilkyVerse theo từ khoá, danh mục, ngân sách, độ ngọt, tiêu chuẩn ăn kiêng (không caffeine, không sữa, đồ ăn vặt).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Từ khoá tên món hoặc thành phần (ví dụ: trân châu, đào, khoai môn, cá viên)"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "tra-sua-truyen-thong|tra-trai-cay|tra-nguyen-chat-pha-vi|tra-macchiato-kem-cheese|sua-tuoi-do-uong-sua|matcha-cacao|frappe-da-xay|nuoc-ep-trai-cay|soda-do-uong-co-gas|nuoc-chanh-giai-khat|ca-phe-do-uong-bo-sung|tra-sua-oolong-rang|vien-chien|ga-chan-ga|khoai-tay-khoai-lang|pho-mai-xuc-xich-do-chien|banh-trang-mon-tron|trung-chen-mon-trung|mi-mon-cay|com-mon-no|noi-tang-mon-nuong|an-vat-bo-sung|combo-an-uong"
+          },
+          "exclude_categories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude_milk_tea": {
+            "type": "boolean",
+            "description": "true nếu người dùng KHÔNG muốn uống trà sữa"
+          },
+          "no_milk": {
+            "type": "boolean",
+            "description": "true nếu không dùng sữa (dị ứng lactose hoặc thuần chay)"
+          },
+          "no_caffeine": {
+            "type": "boolean",
+            "description": "true nếu tránh trà và cà phê (cho buổi tối hoặc mẹ bầu)"
+          },
+          "product_type": {
+            "type": "string",
+            "enum": [
+              "DRINK",
+              "FOOD"
+            ],
+            "description": "DRINK: Đồ uống, FOOD: Đồ ăn vặt"
+          },
+          "max_default_sugar_percent": {
+            "type": "integer",
+            "description": "Độ ngọt tối đa mặc định (ví dụ: 0 cho không đường, 30 cho ít ngọt)"
+          },
+          "max_price": {
+            "type": "integer",
+            "description": "Ngân sách tối đa tính theo VNĐ"
+          },
+          "include_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "default": 5
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_item_link",
+      "description": "Lấy thông tin chi tiết món, link trang món và nút Mua Ngay trực tiếp chuyển sang checkout.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "description": "Mã món (ví dụ: MV-006 hoặc ID số 6)"
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "M",
+              "L",
+              "Tiêu chuẩn"
+            ]
+          },
+          "sugar_percent": {
+            "type": "integer",
+            "enum": [
+              0,
+              30,
+              50,
+              70,
+              100
+            ]
+          },
+          "ice_percent": {
+            "type": "integer",
+            "enum": [
+              0,
+              30,
+              50,
+              70,
+              100
+            ]
+          },
+          "toppings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "item_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_order",
+      "description": "Tạo đơn hàng chính thức sau khi khách đã xác nhận món, size, topping và hình thức thanh toán.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "payment": {
+            "type": "string",
+            "enum": [
+              "momo",
+              "cod",
+              "bank",
+              "vnpay"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "items"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_orders",
+      "description": "Liệt kê danh sách đơn hàng của khách hàng theo trạng thái để tra cứu hoặc chọn huỷ.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "delivering",
+              "completed",
+              "cancelled"
+            ]
+          }
+        },
+        "required": [
+          "user_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "cancel_order",
+      "description": "Huỷ đơn hàng đang chờ xử lý (pending). Bắt buộc phải có sự xác nhận đồng ý của người dùng trước khi gọi.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "order_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_custom_builder_options",
+      "description": "Lấy danh sách các bước, nguyên liệu tự pha chế và combo gợi ý cho trang Tự Pha Chế /diy.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "preference_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "build_custom_drink_link",
+      "description": "Tạo đường link tự pha chế đã điền sẵn các tuỳ chọn tại /diy.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "string"
+          },
+          "milk": {
+            "type": "string"
+          },
+          "flavor": {
+            "type": "string"
+          },
+          "sugar_percent": {
+            "type": "integer"
+          },
+          "ice_percent": {
+            "type": "integer"
+          },
+          "toppings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "base"
+        ]
+      }
+    }
+  }
+]

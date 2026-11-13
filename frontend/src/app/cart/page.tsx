@@ -62,6 +62,11 @@ export default function CartPage() {
       return;
     }
 
+    if (user.role !== "Customer" && user.role !== "Staff") {
+      alert(`Tài khoản vai trò ${user.role} không có quyền đặt món. Chỉ tài khoản Khách Hàng và Nhân Viên mới được phép đặt món.`);
+      return;
+    }
+
     // Store promo code in sessionStorage for checkout
     if (discountAmount > 0 && promoCode) {
       sessionStorage.setItem("milky_promo_code", promoCode.toUpperCase());
@@ -70,6 +75,36 @@ export default function CartPage() {
     }
     router.push("/checkout");
   };
+
+  // Nếu người dùng đăng nhập với vai trò không được đặt món (Shipper, Thủ kho, Quản lý/Admin)
+  if (user && user.role !== "Customer" && user.role !== "Staff") {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center mx-auto">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-[#2D2522]">Tài khoản không có quyền đặt món</h2>
+        <p className="text-xs text-[#786C65] leading-relaxed">
+          Tài khoản của bạn đang có vai trò <strong>{user.role}</strong> (Shipper / Thủ kho / Quản trị viên).
+          Chỉ tài khoản <strong>Khách Hàng</strong> và <strong>Nhân Viên</strong> mới có quyền đặt món tại MilkyVerse.
+        </p>
+        <div className="pt-2">
+          <Link
+            href={
+              user.role === "DeliveryStaff"
+                ? "/delivery"
+                : user.role === "WarehouseStaff"
+                ? "/warehouse"
+                : "/admin"
+            }
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] transition-colors"
+          >
+            Quay lại trang làm việc
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -251,7 +286,7 @@ export default function CartPage() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="MILKYNEW, FREESHIP..."
+                  placeholder="MILKYNEW, #MK2095F54..."
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                   className="flex-1 px-3 py-2 text-xs uppercase font-bold rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] focus:outline-none focus:border-[#6F4E37]"
@@ -262,6 +297,34 @@ export default function CartPage() {
                   className="px-4 py-2 bg-[#6F4E37] text-white text-xs font-bold rounded-xl hover:bg-[#4A3324] disabled:opacity-50 transition-colors"
                 >
                   Áp dụng
+                </button>
+              </div>
+
+              {/* Quick voucher chips & random generator */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPromoCode("#MK2095F54")}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#FAF7F2] border border-[#EFE6DC] text-[#6F4E37] hover:border-[#6F4E37]"
+                >
+                  #MK2095F54 (-25k)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPromoCode("MILKYNEW")}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#FAF7F2] border border-[#EFE6DC] text-[#6F4E37] hover:border-[#6F4E37]"
+                >
+                  MILKYNEW (-15%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const hex = Math.floor(1000000 + Math.random() * 9000000).toString(16).toUpperCase();
+                    setPromoCode(`#MK${hex}`);
+                  }}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100"
+                >
+                  🎲 Tạo mã ngẫu nhiên
                 </button>
               </div>
 

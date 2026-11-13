@@ -39,6 +39,7 @@ public class RegisterRequest
     public string Password { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }
     public string? Address { get; set; }
+    public string? AvatarUrl { get; set; }
     public string? VerificationCode { get; set; }
 }
 
@@ -57,6 +58,7 @@ public class AuthResponse
     public string Role { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
 }
 
 public class UserProfileDto
@@ -66,6 +68,7 @@ public class UserProfileDto
     public string Email { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
     public string Address { get; set; } = string.Empty;
+    public string? AvatarUrl { get; set; }
     public string Role { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
@@ -141,6 +144,38 @@ public class ProductDetailDto : ProductDto
     public List<string> SauceOptions { get; set; } = new() { "Tương ớt cay nồng", "Sốt me chua ngọt đặc chế", "Sốt bơ trứng béo ngậy", "Muối tiêu chanh ớt xanh", "Sốt phô mai cay" };
     public List<string> PortionOptions { get; set; } = new() { "Phần tiêu chuẩn", "Phần lớn (+15.000đ)", "Phần gia đình / khổng lồ (+35.000đ)" };
     public List<ProductDto> RelatedProducts { get; set; } = new();
+    public List<string> Ingredients { get; set; } = new();
+    public string TastingGuide { get; set; } = string.Empty;
+    public double AverageRating { get; set; } = 5.0;
+    public int TotalReviews { get; set; } = 0;
+    public List<ProductReviewDto> Reviews { get; set; } = new();
+}
+
+public class ProductReviewDto
+{
+    public int Id { get; set; }
+    public int ProductId { get; set; }
+    public int UserId { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public string? UserAvatar { get; set; }
+    public int Rating { get; set; } = 5;
+    public string Verdict { get; set; } = "Rất ngon";
+    public string Comment { get; set; } = string.Empty;
+    public bool IsVerifiedPurchase { get; set; } = true;
+    public DateTime CreatedAt { get; set; }
+}
+
+public class CreateProductReviewRequest
+{
+    [System.ComponentModel.DataAnnotations.Range(1, 5)]
+    public int Rating { get; set; } = 5;
+
+    [System.ComponentModel.DataAnnotations.MaxLength(50)]
+    public string Verdict { get; set; } = "Rất ngon";
+
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MaxLength(1000)]
+    public string Comment { get; set; } = string.Empty;
 }
 
 public class CreateProductRequest
@@ -274,7 +309,16 @@ public class OrderDetailResponse
     public decimal TotalPrice { get; set; }
     public bool IsCustomDIY { get; set; }
     public string CustomNotes { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
     public List<OrderItemOptionResponse> Toppings { get; set; } = new();
+}
+
+public class OrderStatusHistoryDto
+{
+    public int Id { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public string Note { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
 }
 
 public class OrderResponse
@@ -293,8 +337,11 @@ public class OrderResponse
     public string CustomerPhone { get; set; } = string.Empty;
     public string ShippingAddress { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
+    public string? CancelReason { get; set; }
+    public bool CanCancel { get; set; } = false;
     public DateTime CreatedAt { get; set; }
     public List<OrderDetailResponse> Items { get; set; } = new();
+    public List<OrderStatusHistoryDto> StatusHistories { get; set; } = new();
 
     // Delivery info
     public int? ShipperId { get; set; }
@@ -304,6 +351,11 @@ public class OrderResponse
     public decimal CodAmount { get; set; } = 0;
     public bool IsCodCollected { get; set; } = false;
     public bool CodReconciled { get; set; } = false;
+}
+
+public class CancelOrderRequest
+{
+    public string Reason { get; set; } = string.Empty;
 }
 
 public class UpdateOrderStatusRequest

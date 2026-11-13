@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MilkyVerse.Api.DTOs;
@@ -82,6 +83,27 @@ public class ProductsController : ControllerBase
     {
         var result = await _productService.DeleteProductAsync(id);
         if (!result.Success) return NotFound(result);
+        return Ok(result);
+    }
+
+    [HttpGet("{id:int}/reviews")]
+    public async Task<IActionResult> GetReviews(int id)
+    {
+        var result = await _productService.GetReviewsAsync(id);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:int}/reviews")]
+    [Authorize]
+    public async Task<IActionResult> AddReview(int id, [FromBody] CreateProductReviewRequest request)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int userId = int.TryParse(userIdStr, out var parsedId) ? parsedId : 0;
+        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "Khách Hàng MilkyVerse";
+        var userAvatar = User.FindFirstValue("avatarUrl");
+
+        var result = await _productService.AddReviewAsync(id, userId, userName, userAvatar, request);
+        if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
 }

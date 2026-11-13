@@ -1,0 +1,230 @@
+{
+  "builder_url": "http://localhost:3000/diy",
+  "steps": [
+    "base",
+    "milk",
+    "flavor",
+    "sugar_percent",
+    "ice_percent",
+    "toppings",
+    "size"
+  ],
+  "base": [
+    {
+      "id": "tra_den",
+      "name_vi": "Cốt Hồng Trà Ceylon Hảo Hạng",
+      "caffeine": 1,
+      "price": 25000
+    },
+    {
+      "id": "tra_oolong",
+      "name_vi": "Cốt Ô Long Rang Khói",
+      "caffeine": 1,
+      "price": 28000
+    },
+    {
+      "id": "tra_lai",
+      "name_vi": "Cốt Lục Trà Hoa Lài Thanh Khiết",
+      "caffeine": 1,
+      "price": 25000
+    },
+    {
+      "id": "tra_matcha",
+      "name_vi": "Matcha Uji Nhật Bản",
+      "caffeine": 1,
+      "price": 30000
+    },
+    {
+      "id": "khong_tra",
+      "name_vi": "Không Dùng Trà (Dành Cho Trẻ Em/Bà Bầu)",
+      "caffeine": 0,
+      "price": 20000
+    }
+  ],
+  "milk": [
+    {
+      "id": "sua_tuoi_dalat",
+      "name_vi": "Sữa Tươi Thanh Trùng Dalat Milk",
+      "price": 12000
+    },
+    {
+      "id": "sua_dac",
+      "name_vi": "Sữa Đặc Truyền Thống Ngọt Béo",
+      "price": 8000
+    },
+    {
+      "id": "sua_hanh_nhan",
+      "name_vi": "Sữa Hạt Hạnh Nhân Thực Vật",
+      "price": 15000
+    },
+    {
+      "id": "sua_oat",
+      "name_vi": "Sữa Yến Mạch Oat Milk",
+      "price": 15000
+    },
+    {
+      "id": "khong_sua",
+      "name_vi": "Không Dùng Sữa (Uống Trà Trái Cây/Mộc)",
+      "price": 0
+    }
+  ],
+  "flavor": [
+    {
+      "id": "khong_vi",
+      "name_vi": "Nguyên Bản Thuần Vị",
+      "price": 0
+    },
+    {
+      "id": "dao",
+      "name_vi": "Đào Tươi Hoàng Kim",
+      "price": 8000
+    },
+    {
+      "id": "vai",
+      "name_vi": "Vải Thiều Nhiệt Đới",
+      "price": 8000
+    },
+    {
+      "id": "dau_tay",
+      "name_vi": "Dâu Tây Đà Lạt Mọng Nước",
+      "price": 8000
+    },
+    {
+      "id": "chanh_day",
+      "name_vi": "Chanh Dây Tươi Chua Ngọt",
+      "price": 8000
+    },
+    {
+      "id": "khoai_mon",
+      "name_vi": "Khoai Môn Bùi Béo Sánh Mịn",
+      "price": 10000
+    },
+    {
+      "id": "socola",
+      "name_vi": "Socola Đen Thượng Hạng",
+      "price": 10000
+    }
+  ],
+  "sugar_options": [
+    0,
+    30,
+    50,
+    70,
+    100
+  ],
+  "ice_options": [
+    0,
+    30,
+    50,
+    70,
+    100
+  ],
+  "toppings": [
+    {
+      "id": "tran_chau_hoang_kim",
+      "name_vi": "Trân châu hoàng kim",
+      "price": 10000
+    },
+    {
+      "id": "tran_chau_trang",
+      "name_vi": "Trân châu trắng",
+      "price": 10000
+    },
+    {
+      "id": "tran_chau_den",
+      "name_vi": "Trân châu đen",
+      "price": 8000
+    },
+    {
+      "id": "tran_chau_duong_den",
+      "name_vi": "Trân châu đường đen",
+      "price": 10000
+    },
+    {
+      "id": "tran_chau_mini",
+      "name_vi": "Trân châu mini",
+      "price": 8000
+    },
+    {
+      "id": "pudding_socola",
+      "name_vi": "Pudding socola",
+      "price": 10000
+    },
+    {
+      "id": "thach_trai_cay",
+      "name_vi": "Thạch trái cây",
+      "price": 8000
+    },
+    {
+      "id": "thach_dua",
+      "name_vi": "Thạch dừa",
+      "price": 8000
+    },
+    {
+      "id": "thach_ca_phe",
+      "name_vi": "Thạch cà phê",
+      "price": 8000
+    },
+    {
+      "id": "thach_nha_dam",
+      "name_vi": "Thạch nha đam",
+      "price": 8000
+    },
+    {
+      "id": "flan",
+      "name_vi": "Flan",
+      "price": 12000
+    },
+    {
+      "id": "dau_do",
+      "name_vi": "Đậu đỏ",
+      "price": 8000
+    },
+    {
+      "id": "hat_thuy_tinh",
+      "name_vi": "Hạt thủy tinh",
+      "price": 10000
+    },
+    {
+      "id": "kem_cheese",
+      "name_vi": "Kem cheese",
+      "price": 15000
+    },
+    {
+      "id": "kem_muoi",
+      "name_vi": "Kem muối",
+      "price": 15000
+    },
+    {
+      "id": "oreo_nghien",
+      "name_vi": "Oreo nghiền",
+      "price": 8000
+    },
+    {
+      "id": "suong_sao",
+      "name_vi": "Sương sáo",
+      "price": 8000
+    }
+  ],
+  "sizes": {
+    "M": 0,
+    "L": 8000
+  },
+  "combo_suggestions": [
+    {
+      "name": "Trà Sữa Oolong Kem Cheese Signature",
+      "desc": "Trà oolong đậm vị, sữa tươi Dalat, kem cheese béo mặn nhẹ",
+      "link": "http://localhost:3000/diy?base=tra_oolong&milk=sua_tuoi_dalat&flavor=khong_vi&toppings=kem_cheese,tran_chau_hoang_kim&sugar=50&ice=70&size=M"
+    },
+    {
+      "name": "Lục Trà Lài Vải Thiều Thạch Trắng",
+      "desc": "Thanh mát giải nhiệt ngày hè, không béo, ít calo",
+      "link": "http://localhost:3000/diy?base=tra_lai&milk=khong_sua&flavor=vai&toppings=tran_chau_trang,thach_nha_dam&sugar=30&ice=100&size=L"
+    },
+    {
+      "name": "Matcha Sữa Yến Mạch Healthy",
+      "desc": "Dành riêng cho team ăn kiêng và thuần chay",
+      "link": "http://localhost:3000/diy?base=tra_matcha&milk=sua_oat&flavor=khong_vi&sugar=30&ice=50&size=M"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Category, Product } from "@/types";
 import { useCart } from "@/context/CartContext";
@@ -18,6 +18,7 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  Zap,
 } from "lucide-react";
 
 type MainTabType = "ALL" | "DRINK" | "FOOD" | "COMBO";
@@ -40,11 +41,12 @@ function MenuContent() {
   const [sortBy, setSortBy] = useState("default");
   const [addedId, setAddedId] = useState<number | null>(null);
 
-  // Pagination (4 items per page)
-  const ITEMS_PER_PAGE = 4;
+  // Pagination (12 items per page)
+  const ITEMS_PER_PAGE = 12;
   const [currentPage, setCurrentPage] = useState(1);
 
   const { addItem } = useCart();
+  const router = useRouter();
 
   useEffect(() => {
     async function loadData() {
@@ -55,7 +57,7 @@ function MenuContent() {
           api.getProducts({
             categoryId: selectedCatId || undefined,
             productType: activeTab !== "ALL" ? activeTab : undefined,
-            search: searchQuery || undefined,
+            search: searchQuery.trim() || undefined,
             sortBy: sortBy !== "default" ? sortBy : undefined,
           }),
         ]);
@@ -76,10 +78,11 @@ function MenuContent() {
     e.preventDefault();
     setLoading(true);
     try {
+      // Tìm kiếm toàn diện không bị bó buộc bởi danh mục đang chọn
+      setActiveTab("ALL");
+      setSelectedCatId(null);
       const prods = await api.getProducts({
-        categoryId: selectedCatId || undefined,
-        productType: activeTab !== "ALL" ? activeTab : undefined,
-        search: searchQuery || undefined,
+        search: searchQuery.trim() || undefined,
         sortBy: sortBy !== "default" ? sortBy : undefined,
       });
       setProducts(prods || []);
@@ -139,6 +142,36 @@ function MenuContent() {
     if (success) {
       setAddedId(id);
       setTimeout(() => setAddedId(null), 1500);
+    }
+  };
+
+  const handleQuickBuyNow = (product: Product) => {
+    const id = product.Id ?? product.id;
+    const name = product.Name ?? product.name;
+    const price = product.BasePrice ?? product.basePrice;
+    const img = product.ImageUrl ?? product.imageUrl;
+    const type = product.ProductType ?? product.productType ?? "DRINK";
+
+    const success = addItem({
+      productId: id,
+      name: name,
+      imageUrl: img,
+      itemType: type,
+      size: type === "DRINK" ? "M" : "Standard",
+      sugarLevel: type === "DRINK" ? "50%" : undefined,
+      iceLevel: type === "DRINK" ? "70%" : undefined,
+      spicyLevel: type === "FOOD" ? (product.spicyLevel ? `Cấp ${product.spicyLevel}` : "Không cay") : undefined,
+      dippingSauce: product.defaultSauce || (type === "FOOD" ? "Tương ớt" : undefined),
+      portionSize: product.portionDescription || "Phần tiêu chuẩn",
+      unitPrice: price,
+      quantity: 1,
+      totalPrice: price,
+      isCustomDIY: false,
+      toppings: [],
+    });
+
+    if (success) {
+      router.push("/checkout");
     }
   };
 
@@ -447,9 +480,9 @@ function MenuContent() {
                     <Link
                       href={`/menu/${slug}`}
                       className="px-2.5 py-1.5 rounded-xl border border-[#EFE6DC] text-[11px] font-bold text-[#6F4E37] hover:bg-[#FAF7F2] transition-colors"
-                      title="Tùy chọn chi tiết"
+                      title="Xem giới thiệu, nguyên liệu & đánh giá"
                     >
-                      Tùy chọn
+                      Chi tiết
                     </Link>
 
                     <button
@@ -458,15 +491,24 @@ function MenuContent() {
                       className={`p-2 rounded-xl font-bold text-xs flex items-center justify-center transition-all ${
                         isAdded
                           ? "bg-[#4E7D55] text-white scale-95"
-                          : "bg-[#6F4E37] text-white hover:bg-[#4A3324] shadow-sm active:scale-95"
+                          : "bg-[#2D2522] text-white hover:bg-[#4A3324] shadow-sm active:scale-95"
                       }`}
-                      title="Thêm nhanh vào giỏ"
+                      title="Thêm vào giỏ hàng"
                     >
                       {isAdded ? (
                         <Check className="w-4 h-4" />
                       ) : (
                         <Plus className="w-4 h-4" />
                       )}
+                    </button>
+
+                    <button
+                      onClick={() => handleQuickBuyNow(p)}
+                      className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-[#6F4E37] to-[#8B5A2B] text-white text-[11px] font-bold hover:brightness-110 shadow-sm flex items-center gap-1 active:scale-95 transition-all shrink-0"
+                      title="Mua ngay lập tức"
+                    >
+                      <Zap className="w-3 h-3 text-amber-300 fill-amber-300" />
+                      <span>Mua Ngay</span>
                     </button>
                   </div>
                 </div>

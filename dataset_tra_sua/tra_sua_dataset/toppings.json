@@ -1,0 +1,272 @@
+[
+  {
+    "id": "tran_chau_hoang_kim",
+    "code": "TOP-01",
+    "name_vi": "Trân châu hoàng kim",
+    "price": 10000,
+    "tags": [
+      "ngot",
+      "dai",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "tran_chau_trang",
+    "code": "TOP-02",
+    "name_vi": "Trân châu trắng",
+    "price": 10000,
+    "tags": [
+      "ngot",
+      "dai",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "tran_chau_den",
+    "code": "TOP-03",
+    "name_vi": "Trân châu đen",
+    "price": 8000,
+    "tags": [
+      "ngot",
+      "dai",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "tran_chau_duong_den",
+    "code": "TOP-04",
+    "name_vi": "Trân châu đường đen",
+    "price": 10000,
+    "tags": [
+      "ngot",
+      "dai",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "tran_chau_mini",
+    "code": "TOP-05",
+    "name_vi": "Trân châu mini",
+    "price": 8000,
+    "tags": [
+      "ngot",
+      "dai",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "pudding_trung",
+    "code": "TOP-06",
+    "name_vi": "Pudding trứng",
+    "price": 10000,
+    "tags": [
+      "topping_an_vat",
+      "beo",
+      "mem",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "pudding_socola",
+    "code": "TOP-07",
+    "name_vi": "Pudding socola",
+    "price": 10000,
+    "tags": [
+      "beo",
+      "mem",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "thach_trai_cay",
+    "code": "TOP-08",
+    "name_vi": "Thạch trái cây",
+    "price": 8000,
+    "tags": [
+      "thanh",
+      "topping",
+      "gion"
+    ],
+    "available": true
+  },
+  {
+    "id": "thach_dua",
+    "code": "TOP-09",
+    "name_vi": "Thạch dừa",
+    "price": 8000,
+    "tags": [
+      "thanh",
+      "topping",
+      "gion"
+    ],
+    "available": true
+  },
+  {
+    "id": "thach_ca_phe",
+    "code": "TOP-10",
+    "name_vi": "Thạch cà phê",
+    "price": 8000,
+    "tags": [
+      "thanh",
+      "topping",
+      "gion"
+    ],
+    "available": true
+  },
+  {
+    "id": "thach_nha_dam",
+    "code": "TOP-11",
+    "name_vi": "Thạch nha đam",
+    "price": 8000,
+    "tags": [
+      "thanh",
+      "topping",
+      "gion"
+    ],
+    "available": true
+  },
+  {
+    "id": "thach_pho_mai",
+    "code": "TOP-12",
+    "name_vi": "Thạch phô mai",
+    "price": 12000,
+    "tags": [
+      "topping_an_vat",
+      "thanh",
+      "topping",
+      "gion"
+    ],
+    "available": true
+  },
+  {
+    "id": "flan",
+    "code": "TOP-13",
+    "name_vi": "Flan",
+    "price": 12000,
+    "tags": [
+      "beo",
+      "mem",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "dau_do",
+    "code": "TOP-14",
+    "name_vi": "Đậu đỏ",
+    "price": 8000,
+    "tags": [
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "hat_thuy_tinh",
+    "code": "TOP-15",
+    "name_vi": "Hạt thủy tinh",
+    "price": 10000,
+    "tags": [
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "kem_cheese",
+    "code": "TOP-16",
+    "name_vi": "Kem cheese",
+    "price": 15000,
+    "tags": [
+      "beo",
+      "mem",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "kem_trung",
+    "code": "TOP-17",
+    "name_vi": "Kem trứng",
+    "price": 15000,
+    "tags": [
+      "topping_an_vat",
+      "beo",
+      "mem",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "kem_muoi",
+    "code": "TOP-18",
+    "name_vi": "Kem muối",
+    "price": 15000,
+    "tags": [
+      "beo",
+      "mem",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "oreo_nghien",
+    "code": "TOP-19",
+    "name_vi": "Oreo nghiền",
+    "price": 8000,
+    "tags": [
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "suong_sao",
+    "code": "TOP-20",
+    "name_vi": "Sương sáo",
+    "price": 8000,
+    "tags": [
+      "thanh",
+      "topping",
+      "gion"
+    ],
+    "available": true
+  },
+  {
+    "id": "them_pho_mai_keo_soi_mon_an",
+    "code": "TOP-21",
+    "name_vi": "Thêm Phô Mai Kéo Sợi (Món Ăn)",
+    "price": 12000,
+    "tags": [
+      "topping_an_vat",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "them_trung_op_la_long_dao",
+    "code": "TOP-22",
+    "name_vi": "Thêm Trứng Ốp La Lòng Đào",
+    "price": 8000,
+    "tags": [
+      "topping_an_vat",
+      "topping"
+    ],
+    "available": true
+  },
+  {
+    "id": "them_xuc_xich_duc_chien",
+    "code": "TOP-23",
+    "name_vi": "Thêm Xúc Xích Đức Chiên",
+    "price": 12000,
+    "tags": [
+      "topping_an_vat",
+      "topping"
+    ],
+    "available": true
+  }
+]

@@ -52,6 +52,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [items, isLoaded]);
 
+  // Tài khoản Shipper, Thủ kho, Quản lý/Admin không được giữ giỏ hàng đặt món
+  useEffect(() => {
+    if (user && user.role !== "Customer" && user.role !== "Staff") {
+      setItems([]);
+      localStorage.removeItem("milky_cart");
+    }
+  }, [user]);
+
   const openAuthModal = (msg?: string) => {
     setAuthModalMsg(msg);
     setShowAuthModal(true);
@@ -67,6 +75,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addItem = (item: Omit<CartItem, "id">): boolean => {
     if (!user) {
       openAuthModal("Bạn cần đăng nhập hoặc đăng ký tài khoản để thêm món ăn hoặc trà sữa vào giỏ hàng!");
+      return false;
+    }
+
+    if (user.role !== "Customer" && user.role !== "Staff") {
+      alert(`Tài khoản vai trò ${user.role} không có quyền đặt món. Chỉ tài khoản Khách Hàng và Nhân Viên mới có thể đặt món.`);
       return false;
     }
 

@@ -16,6 +16,8 @@ import {
   Search,
   Check,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 export default function WarehousePage() {
@@ -29,6 +31,11 @@ export default function WarehousePage() {
   const [audits, setAudits] = useState<StockAudit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [pageStock, setPageStock] = useState(1);
+  const [pageFefo, setPageFefo] = useState(1);
+  const [pageReceipts, setPageReceipts] = useState(1);
+  const [pageAudits, setPageAudits] = useState(1);
+  const ITEMS_PER_PAGE = 8;
 
   // Modal Create Receipt
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -324,7 +331,10 @@ export default function WarehousePage() {
                 type="text"
                 placeholder="Tìm nguyên liệu..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPageStock(1);
+                }}
                 className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
               />
               <Search className="w-3.5 h-3.5 text-[#786C65] absolute left-3 top-2.5" />
@@ -344,9 +354,24 @@ export default function WarehousePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#FAF7F2]">
-                {ingredients
-                  .filter((i) => !searchQuery || i.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((i) => {
+                {(() => {
+                  const filtered = ingredients.filter(
+                    (i) => !searchQuery || i.name.toLowerCase().includes(searchQuery.toLowerCase())
+                  );
+                  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
+                  const paged = filtered.slice((pageStock - 1) * ITEMS_PER_PAGE, pageStock * ITEMS_PER_PAGE);
+
+                  if (paged.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-[#786C65]">
+                          Không tìm thấy nguyên liệu phù hợp
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return paged.map((i) => {
                     const isLow = i.currentStock <= i.minAlertThreshold;
                     return (
                       <tr key={i.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
@@ -378,10 +403,56 @@ export default function WarehousePage() {
                         </td>
                       </tr>
                     );
-                  })}
+                  });
+                })()}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Stock */}
+          {(() => {
+            const filtered = ingredients.filter(
+              (i) => !searchQuery || i.name.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+            const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
+            if (totalPages <= 1) return null;
+            return (
+              <div className="p-4 border-t border-[#EFE6DC] flex items-center justify-between text-xs text-[#786C65]">
+                <span>
+                  Trang {pageStock} / {totalPages} (Tổng {filtered.length} nguyên liệu)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={pageStock <= 1}
+                    onClick={() => setPageStock((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => setPageStock(num)}
+                      className={`w-7 h-7 rounded-lg font-bold ${
+                        pageStock === num
+                          ? "bg-[#6F4E37] text-white"
+                          : "border border-[#EFE6DC] hover:bg-[#FAF7F2]"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    disabled={pageStock >= totalPages}
+                    onClick={() => setPageStock((p) => Math.min(totalPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -406,39 +477,96 @@ export default function WarehousePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#FAF7F2]">
-                {batches.map((b) => (
-                  <tr key={b.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-[#6F4E37]">{b.batchNumber}</td>
-                    <td className="py-3 px-4 font-bold text-[#2D2522]">{b.ingredientName}</td>
-                    <td className="py-3 px-4 font-black">
-                      {b.currentQuantity.toLocaleString("vi-VN")} {b.unit}
-                    </td>
-                    <td className="py-3 px-4 text-[#786C65]">
-                      {new Date(b.manufactureDate).toLocaleDateString("vi-VN")}
-                    </td>
-                    <td className="py-3 px-4 font-bold text-[#2D2522]">
-                      {new Date(b.expiryDate).toLocaleDateString("vi-VN")}
-                    </td>
-                    <td className="py-3 px-4">
-                      {b.isExpired ? (
-                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-bold text-[10px]">
-                          Đã hết hạn ({b.daysRemaining} ngày)
-                        </span>
-                      ) : b.isNearExpiry ? (
-                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px]">
-                          Cận hạn (Còn {b.daysRemaining} ngày)
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                          Còn {b.daysRemaining} ngày
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  const totalPages = Math.ceil(batches.length / ITEMS_PER_PAGE) || 1;
+                  const paged = batches.slice((pageFefo - 1) * ITEMS_PER_PAGE, pageFefo * ITEMS_PER_PAGE);
+
+                  if (paged.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-[#786C65]">
+                          Không có lô hàng nào
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return paged.map((b) => (
+                    <tr key={b.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-[#6F4E37]">{b.batchNumber}</td>
+                      <td className="py-3 px-4 font-bold text-[#2D2522]">{b.ingredientName}</td>
+                      <td className="py-3 px-4 font-black">
+                        {b.currentQuantity.toLocaleString("vi-VN")} {b.unit}
+                      </td>
+                      <td className="py-3 px-4 text-[#786C65]">
+                        {new Date(b.manufactureDate).toLocaleDateString("vi-VN")}
+                      </td>
+                      <td className="py-3 px-4 font-bold text-[#2D2522]">
+                        {new Date(b.expiryDate).toLocaleDateString("vi-VN")}
+                      </td>
+                      <td className="py-3 px-4">
+                        {b.isExpired ? (
+                          <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-bold text-[10px]">
+                            Đã hết hạn ({b.daysRemaining} ngày)
+                          </span>
+                        ) : b.isNearExpiry ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px]">
+                            Cận hạn (Còn {b.daysRemaining} ngày)
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                            Còn {b.daysRemaining} ngày
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination FEFO */}
+          {(() => {
+            const totalPages = Math.ceil(batches.length / ITEMS_PER_PAGE) || 1;
+            if (totalPages <= 1) return null;
+            return (
+              <div className="p-4 border-t border-[#EFE6DC] flex items-center justify-between text-xs text-[#786C65]">
+                <span>
+                  Trang {pageFefo} / {totalPages} (Tổng {batches.length} lô FEFO)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={pageFefo <= 1}
+                    onClick={() => setPageFefo((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => setPageFefo(num)}
+                      className={`w-7 h-7 rounded-lg font-bold ${
+                        pageFefo === num
+                          ? "bg-[#6F4E37] text-white"
+                          : "border border-[#EFE6DC] hover:bg-[#FAF7F2]"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    disabled={pageFefo >= totalPages}
+                    onClick={() => setPageFefo((p) => Math.min(totalPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -468,23 +596,80 @@ export default function WarehousePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#FAF7F2]">
-                {receipts.map((r) => (
-                  <tr key={r.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-[#6F4E37]">{r.receiptCode}</td>
-                    <td className="py-3 px-4 font-bold text-[#2D2522]">{r.supplierName}</td>
-                    <td className="py-3 px-4">{r.itemCount} món</td>
-                    <td className="py-3 px-4 font-black text-[#6F4E37]">
-                      {r.totalCost.toLocaleString("vi-VN")}đ
-                    </td>
-                    <td className="py-3 px-4 text-[#786C65]">
-                      {new Date(r.createdAt).toLocaleString("vi-VN")}
-                    </td>
-                    <td className="py-3 px-4 text-[#786C65] italic">{r.notes || "—"}</td>
-                  </tr>
-                ))}
+                {(() => {
+                  const totalPages = Math.ceil(receipts.length / ITEMS_PER_PAGE) || 1;
+                  const paged = receipts.slice((pageReceipts - 1) * ITEMS_PER_PAGE, pageReceipts * ITEMS_PER_PAGE);
+
+                  if (paged.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-[#786C65]">
+                          Chưa có phiếu nhập kho nào
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return paged.map((r) => (
+                    <tr key={r.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-[#6F4E37]">{r.receiptCode}</td>
+                      <td className="py-3 px-4 font-bold text-[#2D2522]">{r.supplierName}</td>
+                      <td className="py-3 px-4">{r.itemCount} món</td>
+                      <td className="py-3 px-4 font-black text-[#6F4E37]">
+                        {r.totalCost.toLocaleString("vi-VN")}đ
+                      </td>
+                      <td className="py-3 px-4 text-[#786C65]">
+                        {new Date(r.createdAt).toLocaleString("vi-VN")}
+                      </td>
+                      <td className="py-3 px-4 text-[#786C65] italic">{r.notes || "—"}</td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Receipts */}
+          {(() => {
+            const totalPages = Math.ceil(receipts.length / ITEMS_PER_PAGE) || 1;
+            if (totalPages <= 1) return null;
+            return (
+              <div className="p-4 border-t border-[#EFE6DC] flex items-center justify-between text-xs text-[#786C65]">
+                <span>
+                  Trang {pageReceipts} / {totalPages} (Tổng {receipts.length} phiếu nhập)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={pageReceipts <= 1}
+                    onClick={() => setPageReceipts((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => setPageReceipts(num)}
+                      className={`w-7 h-7 rounded-lg font-bold ${
+                        pageReceipts === num
+                          ? "bg-[#6F4E37] text-white"
+                          : "border border-[#EFE6DC] hover:bg-[#FAF7F2]"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    disabled={pageReceipts >= totalPages}
+                    onClick={() => setPageReceipts((p) => Math.min(totalPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -513,24 +698,81 @@ export default function WarehousePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#FAF7F2]">
-                {audits.map((a) => (
-                  <tr key={a.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-[#6F4E37]">{a.auditCode}</td>
-                    <td className="py-3 px-4 text-[#786C65]">
-                      {new Date(a.auditDate).toLocaleString("vi-VN")}
-                    </td>
-                    <td className="py-3 px-4 font-bold text-[#2D2522]">{a.items?.length || 0} món</td>
-                    <td className="py-3 px-4">
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                        Đã cân bằng tồn kho
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-[#786C65] italic">{a.notes || "—"}</td>
-                  </tr>
-                ))}
+                {(() => {
+                  const totalPages = Math.ceil(audits.length / ITEMS_PER_PAGE) || 1;
+                  const paged = audits.slice((pageAudits - 1) * ITEMS_PER_PAGE, pageAudits * ITEMS_PER_PAGE);
+
+                  if (paged.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-[#786C65]">
+                          Chưa có lịch sử kiểm kê nào
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return paged.map((a) => (
+                    <tr key={a.id} className="hover:bg-[#FAF7F2]/50 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-[#6F4E37]">{a.auditCode}</td>
+                      <td className="py-3 px-4 text-[#786C65]">
+                        {new Date(a.auditDate).toLocaleString("vi-VN")}
+                      </td>
+                      <td className="py-3 px-4 font-bold text-[#2D2522]">{a.items?.length || 0} món</td>
+                      <td className="py-3 px-4">
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
+                          Đã cân bằng tồn kho
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-[#786C65] italic">{a.notes || "—"}</td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Audits */}
+          {(() => {
+            const totalPages = Math.ceil(audits.length / ITEMS_PER_PAGE) || 1;
+            if (totalPages <= 1) return null;
+            return (
+              <div className="p-4 border-t border-[#EFE6DC] flex items-center justify-between text-xs text-[#786C65]">
+                <span>
+                  Trang {pageAudits} / {totalPages} (Tổng {audits.length} lần kiểm kê)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={pageAudits <= 1}
+                    onClick={() => setPageAudits((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                    <button
+                      key={num}
+                      onClick={() => setPageAudits(num)}
+                      className={`w-7 h-7 rounded-lg font-bold ${
+                        pageAudits === num
+                          ? "bg-[#6F4E37] text-white"
+                          : "border border-[#EFE6DC] hover:bg-[#FAF7F2]"
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <button
+                    disabled={pageAudits >= totalPages}
+                    onClick={() => setPageAudits((p) => Math.min(totalPages, p + 1))}
+                    className="p-1.5 rounded-lg border border-[#EFE6DC] hover:bg-[#FAF7F2] disabled:opacity-30 disabled:pointer-events-none"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

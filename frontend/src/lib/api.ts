@@ -10,6 +10,7 @@ import {
   OrderResponse,
   Product,
   ProductDetail,
+  ProductReview,
   Promotion,
   PurchaseReceipt,
   ShipperDashboard,
@@ -33,10 +34,16 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   try {
     const res = await fetch(url, { ...options, headers });
-    const data = await res.json();
+    let data: any;
+    const text = await res.text();
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { message: text || `Yêu cầu thất bại với mã ${res.status}` };
+    }
 
     if (!res.ok) {
-      throw new Error(data.message || `Request failed with status ${res.status}`);
+      throw new Error(data.message || `Yêu cầu thất bại với mã ${res.status}`);
     }
 
     return data.data !== undefined ? data.data : data;
@@ -62,7 +69,7 @@ export const api = {
 
   getProfile: () => request<User>("/auth/me"),
 
-  updateProfile: (payload: { fullName: string; phoneNumber: string; address: string; password?: string }) =>
+  updateProfile: (payload: { fullName: string; phoneNumber: string; address: string; avatarUrl?: string; password?: string }) =>
     request<User>("/auth/profile", { method: "PUT", body: JSON.stringify(payload) }),
 
   // Products & Categories
@@ -82,6 +89,9 @@ export const api = {
   getProductBySlug: (slug: string) => request<ProductDetail>(`/products/slug/${slug}`),
   getProductById: (id: number) => request<ProductDetail>(`/products/${id}`),
   getToppings: () => request<Topping[]>("/products/toppings"),
+  getProductReviews: (productId: number) => request<ProductReview[]>(`/products/${productId}/reviews`),
+  createProductReview: (productId: number, payload: { rating: number; verdict?: string; comment: string }) =>
+    request<ProductReview>(`/products/${productId}/reviews`, { method: "POST", body: JSON.stringify(payload) }),
 
   createProduct: (payload: Partial<Product>) => request<Product>("/products", { method: "POST", body: JSON.stringify(payload) }),
   updateProduct: (id: number, payload: Partial<Product>) => request<Product>(`/products/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
@@ -103,6 +113,12 @@ export const api = {
     request<OrderResponse>(`/orders/${id}/status`, {
       method: "PUT",
       body: JSON.stringify({ status, paymentStatus, note }),
+    }),
+
+  cancelOrder: (id: number, reason: string) =>
+    request<OrderResponse>(`/orders/${id}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
     }),
 
   validatePromo: (code: string, subtotal: number) =>

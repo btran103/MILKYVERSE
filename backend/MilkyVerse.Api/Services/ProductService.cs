@@ -15,6 +15,8 @@ public interface IProductService
     Task<ApiResponse<ProductDto>> CreateProductAsync(CreateProductRequest request);
     Task<ApiResponse<ProductDto>> UpdateProductAsync(int id, UpdateProductRequest request);
     Task<ApiResponse<bool>> DeleteProductAsync(int id);
+    Task<ApiResponse<List<ProductReviewDto>>> GetReviewsAsync(int productId);
+    Task<ApiResponse<ProductReviewDto>> AddReviewAsync(int productId, int userId, string userName, string? userAvatar, CreateProductReviewRequest request);
 }
 
 public class ProductService : IProductService
@@ -186,6 +188,90 @@ public class ProductService : IProductService
             })
             .ToListAsync();
 
+        var reviews = new List<ProductReviewDto>();
+        try
+        {
+            reviews = await _context.ProductReviews
+                .Where(r => r.ProductId == p.Id)
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => new ProductReviewDto
+                {
+                    Id = r.Id,
+                    ProductId = r.ProductId,
+                    UserId = r.UserId,
+                    UserName = r.UserName,
+                    UserAvatar = r.UserAvatar,
+                    Rating = r.Rating,
+                    Verdict = r.Verdict,
+                    Comment = r.Comment,
+                    IsVerifiedPurchase = r.IsVerifiedPurchase,
+                    CreatedAt = r.CreatedAt
+                })
+                .ToListAsync();
+        }
+        catch
+        {
+            // Table may not exist yet or no reviews
+        }
+
+        double avgRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 1) : 5.0;
+
+        // Auto-generate realistic ingredient list based on product type & name
+        var ingredients = new List<string>();
+        var nameLower = (p.Name ?? "").ToLower();
+        var type = (p.ProductType ?? "DRINK").ToUpper();
+
+        if (type == "FOOD")
+        {
+            if (nameLower.Contains("cá viên") || nameLower.Contains("chiên"))
+            {
+                ingredients.AddRange(new[] { "Thịt cá ba sa & tôm sú quết nhuyễn tươi sạch", "Gia vị tiêu sọ Đắk Lắk & hạt nêm tự nhiên", "Dầu thực vật dinh dưỡng chiên mới mỗi ca", "Dưa leo tươi & rau răm ăn kèm chuẩn VietGAP", "Sốt chấm tương đen xào sa tế gia truyền" });
+            }
+            else if (nameLower.Contains("bánh tráng"))
+            {
+                ingredients.AddRange(new[] { "Bánh tráng phơi sương Trảng Bàng Tây Ninh loại 1", "Khô bò sợi cay thượng hạng", "Khô gà lá chanh thơm lừng", "Xoài xanh non thái sợi giòn ngọt", "Trứng cút luộc lòng đào", "Nước sốt bò sa tế tắc đậm đà", "Hành phi giòn & đậu phộng rang muối" });
+            }
+            else if (nameLower.Contains("chân gà"))
+            {
+                ingredients.AddRange(new[] { "Chân gà rút xương sạch loại A giòn sần sật", "Sả cây & lá chanh Thái thơm nồng", "Cóc non bao tử & xoài giòn", "Nước sốt Thái chua cay mặn ngọt đặc chế từ ớt xiêm rừng", "Tắc tươi vắt lấy nước cốt thanh mát" });
+            }
+            else if (nameLower.Contains("mì cay") || nameLower.Contains("mi cay"))
+            {
+                ingredients.AddRange(new[] { "Mì sợi tròn Hàn Quốc nấu dai mềm chuẩn vị Koreno", "Tôm sú tươi & mực nang giòn ngọt", "Bò Mỹ cuộn nấm kim châm", "Bắp cải tím, bông cải xanh & nấm kim châm sạch", "Nước dùng xương hầm 8 tiếng cùng ớt bột Hàn Quốc 7 cấp độ" });
+            }
+            else
+            {
+                ingredients.AddRange(new[] { "Nguyên liệu tươi sạch nhập mới mỗi ngày", "Dầu thực vật chiên nóng sốt tại quầy", "Gia vị thảo mộc tự nhiên", "Rau thơm và dưa chua ăn kèm chuẩn ATVSTP" });
+            }
+        }
+        else
+        {
+            if (nameLower.Contains("matcha"))
+            {
+                ingredients.AddRange(new[] { "Bột trà xanh Matcha Uji nhập khẩu Nhật Bản nguyên chất", "Sữa tươi thanh trùng Đà Lạt Milk / VietGAP", "Đường mía organic cô đặc thanh ngọt", "Đá viên lọc RO tiệt trùng" });
+            }
+            else if (nameLower.Contains("đào") || nameLower.Contains("cam sả") || nameLower.Contains("trái cây") || nameLower.Contains("hoa quả") || nameLower.Contains("dâu"))
+            {
+                ingredients.AddRange(new[] { "Cốt hồng trà hảo hạng ủ mới mỗi 4 giờ", "Trái cây tươi tự nhiên (Đào / Cam vàng / Dâu tây)", "Sả tươi đập dập thơm dịu nhẹ", "Nước cốt quả tươi ép nguyên chất", "Mật ong hoa rừng tự nhiên" });
+            }
+            else if (nameLower.Contains("kem cheese") || nameLower.Contains("macchiato"))
+            {
+                ingredients.AddRange(new[] { "Cốt trà Ô Long hoặc Trà Xanh ủ lạnh giữ trọn hương", "Lớp kem phô mai Cream Cheese Anchor New Zealand béo ngậy", "Sữa tươi thanh trùng", "Chút muối hồng Himalaya tạo hậu vị đậm đà độc đáo" });
+            }
+            else if (nameLower.Contains("cà phê") || nameLower.Contains("cafe"))
+            {
+                ingredients.AddRange(new[] { "Hạt Robusta & Arabica Cầu Đất rang mộc đậm đà", "Sữa đặc béo thơm truyền thống", "Kem muối biển bồng bềnh đặc chế MilkyVerse", "Đá tinh khiết" });
+            }
+            else
+            {
+                ingredients.AddRange(new[] { "Lá trà Ô Long Mộc Châu tuyển chọn sao sấy thủ công", "Sữa tươi thanh trùng tiệt trùng VietGAP", "Bột kem béo thực vật không đường lactose tốt cho tiêu hóa", "Trân châu hoàng kim nấu đường đen mía nguyên chất", "Nước lọc tinh khiết RO qua 5 tầng lọc" });
+            }
+        }
+
+        string tastingGuide = p.ProductType == "FOOD"
+            ? "Thưởng thức ngon nhất khi món ăn vừa được chế biến nóng giòn. Chấm cùng nước sốt đặc chế đi kèm để cảm nhận trọn vẹn sự hòa quyện gia vị bùng nổ vị giác!"
+            : "• 0% Đường: Vị trà mộc mạc, đậm đà, hơi chát nhẹ hậu ngọt thanh (dành cho người ăn kiêng / healthy).\n• 30% Đường: Vị ngọt nhẹ nhàng thanh mát, giữ trọn 100% nốt hương hoa trà.\n• 50% Đường: (Khuyên Dùng - Chuẩn MilkyVerse) Cân bằng hoàn mỹ giữa vị đậm của trà và béo ngậy của sữa tươi.\n• 70% Đường: Ngọt dịu êm, thơm béo hài hòa.\n• 100% Đường: Ngọt đậm đà truyền thống, thích hợp uống khi tan cùng nhiều đá lạnh.";
+
         var detail = new ProductDetailDto
         {
             Id = p.Id,
@@ -213,7 +299,12 @@ public class ProductService : IProductService
             SpicyOptions = new List<string> { "Cấp 0 - Không cay", "Cấp 1 - Cay nhẹ", "Cấp 2 - Cay vừa", "Cấp 3 - Cay nồng", "Cấp 5 - Rất cay", "Cấp 7 - Siêu cay" },
             SauceOptions = new List<string> { "Tương ớt cay nồng", "Sốt me chua ngọt đặc chế", "Sốt bơ trứng béo ngậy", "Muối tiêu chanh ớt xanh", "Sốt phô mai cay", "Tương đen xào sa tế" },
             PortionOptions = new List<string> { "Phần tiêu chuẩn", "Phần lớn (+15.000đ)", "Phần gia đình / khổng lồ (+35.000đ)" },
-            RelatedProducts = related
+            RelatedProducts = related,
+            Ingredients = ingredients,
+            TastingGuide = tastingGuide,
+            AverageRating = avgRating,
+            TotalReviews = reviews.Count,
+            Reviews = reviews
         };
 
         return ApiResponse<ProductDetailDto>.Ok(detail);
@@ -346,5 +437,76 @@ public class ProductService : IProductService
         await _context.SaveChangesAsync();
 
         return ApiResponse<bool>.Ok(true, "Đã ngừng kinh doanh món này.");
+    }
+
+    public async Task<ApiResponse<List<ProductReviewDto>>> GetReviewsAsync(int productId)
+    {
+        try
+        {
+            var reviews = await _context.ProductReviews
+                .Where(r => r.ProductId == productId)
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => new ProductReviewDto
+                {
+                    Id = r.Id,
+                    ProductId = r.ProductId,
+                    UserId = r.UserId,
+                    UserName = r.UserName,
+                    UserAvatar = r.UserAvatar,
+                    Rating = r.Rating,
+                    Verdict = r.Verdict,
+                    Comment = r.Comment,
+                    IsVerifiedPurchase = r.IsVerifiedPurchase,
+                    CreatedAt = r.CreatedAt
+                })
+                .ToListAsync();
+
+            return ApiResponse<List<ProductReviewDto>>.Ok(reviews);
+        }
+        catch
+        {
+            return ApiResponse<List<ProductReviewDto>>.Ok(new List<ProductReviewDto>());
+        }
+    }
+
+    public async Task<ApiResponse<ProductReviewDto>> AddReviewAsync(int productId, int userId, string userName, string? userAvatar, CreateProductReviewRequest request)
+    {
+        var product = await _context.Products.FindAsync(productId);
+        if (product == null)
+        {
+            return ApiResponse<ProductReviewDto>.Fail("Không tìm thấy sản phẩm.");
+        }
+
+        var review = new ProductReview
+        {
+            ProductId = productId,
+            UserId = userId,
+            UserName = string.IsNullOrWhiteSpace(userName) ? "Khách Hàng MilkyVerse" : userName,
+            UserAvatar = userAvatar,
+            Rating = Math.Clamp(request.Rating, 1, 5),
+            Verdict = string.IsNullOrWhiteSpace(request.Verdict) ? "Rất ngon" : request.Verdict,
+            Comment = request.Comment?.Trim() ?? string.Empty,
+            IsVerifiedPurchase = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.ProductReviews.Add(review);
+        await _context.SaveChangesAsync();
+
+        var dto = new ProductReviewDto
+        {
+            Id = review.Id,
+            ProductId = review.ProductId,
+            UserId = review.UserId,
+            UserName = review.UserName,
+            UserAvatar = review.UserAvatar,
+            Rating = review.Rating,
+            Verdict = review.Verdict,
+            Comment = review.Comment,
+            IsVerifiedPurchase = review.IsVerifiedPurchase,
+            CreatedAt = review.CreatedAt
+        };
+
+        return ApiResponse<ProductReviewDto>.Ok(dto, "Cảm ơn bạn đã gửi đánh giá cho món ăn!");
     }
 }
