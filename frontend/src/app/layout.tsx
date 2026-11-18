@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
+import { AnnouncementMarquee } from "@/components/layout/AnnouncementMarquee";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 
@@ -37,6 +38,7 @@ export default function RootLayout({
             <Suspense fallback={<div className="h-20 bg-[#FAF7F2]" />}>
               <Navbar />
             </Suspense>
+            <AnnouncementMarquee />
             <main className="flex-1">{children}</main>
             <Footer />
           </CartProvider>

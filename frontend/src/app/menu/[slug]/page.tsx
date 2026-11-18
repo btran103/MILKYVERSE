@@ -563,6 +563,160 @@ export default function ProductDetailPage({
             </>
           )}
 
+          {/* COMBO OPTIONS (DYNAMIC COMBO BOM FROM DATABASE) */}
+          {pType === "COMBO" && (
+            <div className="space-y-6">
+              {/* 1. Dynamic Included Items from Database */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#6F4E37] flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-[#C5A059]" />
+                    <span>Các Món Có Trong Combo (Dữ Liệu Thực Tế):</span>
+                  </span>
+                  <span className="text-xs text-[#786C65]">
+                    {product.comboItems && product.comboItems.length > 0 ? `${product.comboItems.length} món trọn gói` : "Trọn gói"}
+                  </span>
+                </label>
+
+                {product.comboItems && product.comboItems.length > 0 ? (
+                  <div className="space-y-2.5">
+                    {product.comboItems.map((item, idx) => (
+                      <div
+                        key={item.id || idx}
+                        className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#FAF7F2] border border-[#EFE6DC]"
+                      >
+                        <div className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-[#EFE6DC] shrink-0">
+                          <img
+                            src={item.imageUrl || "/logo.png"}
+                            alt={item.productName}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs sm:text-sm text-[#2D2522] truncate">
+                              {item.productName}
+                            </span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-[#6F4E37] border border-[#EFE6DC]">
+                              x{item.quantity}
+                            </span>
+                          </div>
+                          {item.customNotes && (
+                            <p className="text-[11px] text-[#786C65] truncate mt-0.5">
+                              {item.customNotes}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-xs font-bold text-[#6F4E37] shrink-0">
+                          {item.productType === "DRINK" ? "Đồ uống" : "Món ăn"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-[#FAF7F2] border border-[#EFE6DC] text-xs text-[#786C65]">
+                    {pDesc}
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Customization for Drink in Combo */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#EFE6DC]">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#2D2522]">
+                    Độ Ngọt Món Nước: <span className="text-[#6F4E37] font-semibold">{selectedSugar}</span>
+                  </label>
+                  <div className="grid grid-cols-5 gap-1">
+                    {["0%", "25%", "50%", "70%", "100%"].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSelectedSugar(s)}
+                        className={`py-2 text-xs font-bold rounded-xl border transition-all ${
+                          selectedSugar === s
+                            ? "border-[#6F4E37] bg-[#6F4E37] text-white"
+                            : "border-[#EFE6DC] bg-white text-[#2D2522] hover:bg-[#FAF7F2]"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#2D2522]">
+                    Lượng Đá Món Nước: <span className="text-[#6F4E37] font-semibold">{selectedIce}</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {["Không đá", "Ít đá", "Bình thường", "Nhiều đá"].map((i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setSelectedIce(i)}
+                        className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center ${
+                          selectedIce === i
+                            ? "border-[#6F4E37] bg-[#6F4E37] text-white"
+                            : "border-[#EFE6DC] bg-white text-[#2D2522] hover:bg-[#FAF7F2]"
+                        }`}
+                      >
+                        {i}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Customization for Food in Combo */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#EFE6DC]">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#2D2522] flex items-center gap-1.5">
+                    <Flame className="w-3.5 h-3.5 text-red-500" />
+                    <span>Mức Độ Cay (Món Ăn):</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {spicyOptions.slice(0, 3).map((spicy) => (
+                      <button
+                        key={spicy}
+                        type="button"
+                        onClick={() => setSelectedSpicy(spicy)}
+                        className={`py-2 px-2 rounded-xl border text-xs font-bold transition-all truncate text-center ${
+                          selectedSpicy === spicy
+                            ? "border-red-600 bg-red-50 text-red-700"
+                            : "border-[#EFE6DC] bg-white text-[#2D2522] hover:bg-[#FAF7F2]"
+                        }`}
+                      >
+                        {spicy.split(" - ")[1] || spicy}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#2D2522]">
+                    Nước Sốt Ăn Kèm:
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {sauceOptions.slice(0, 2).map((sauce) => (
+                      <button
+                        key={sauce}
+                        type="button"
+                        onClick={() => setSelectedSauce(sauce)}
+                        className={`py-2 px-2 rounded-xl border text-xs font-bold transition-all truncate text-center ${
+                          selectedSauce === sauce
+                            ? "border-[#6F4E37] bg-[#F7D6D0]/40 text-[#6F4E37]"
+                            : "border-[#EFE6DC] bg-white text-[#2D2522] hover:bg-[#FAF7F2]"
+                        }`}
+                      >
+                        {sauce}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Toppings / Extras */}
           {product.availableToppings && product.availableToppings.length > 0 && (
             <div className="space-y-3">

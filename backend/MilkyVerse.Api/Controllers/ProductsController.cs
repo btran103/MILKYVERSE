@@ -45,6 +45,13 @@ public class ProductsController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("reviews/recent")]
+    public async Task<IActionResult> GetRecentReviews([FromQuery] int limit = 10)
+    {
+        var result = await _productService.GetAllRecentReviewsAsync(limit);
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {

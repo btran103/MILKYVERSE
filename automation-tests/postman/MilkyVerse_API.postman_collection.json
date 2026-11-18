@@ -1,0 +1,280 @@
+{
+  "info": {
+    "_postman_id": "a9b1c2d3-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+    "name": "MilkyVerse API Automation Test Suite",
+    "description": "Bộ kiểm thử tự động API toàn diện cho hệ thống MilkyVerse (Auth, Products, Reviews, DIY Studio, Orders)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Categories - Lấy danh mục sản phẩm",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code là 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Dữ liệu danh mục trả về mảng không rỗng\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    var data = jsonData.data || jsonData;",
+              "    pm.expect(data).to.be.an('array');",
+              "    pm.expect(data.length).to.be.above(0);",
+              "});",
+              "pm.test(\"Thời gian phản hồi < 1500ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(1500);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products/categories",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "categories"]
+        }
+      }
+    },
+    {
+      "name": "2. Products - Lấy danh sách sản phẩm",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code là 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Sản phẩm có đầy đủ thông tin Id, Name, BasePrice\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    var items = jsonData.data || jsonData;",
+              "    pm.expect(items).to.be.an('array');",
+              "    var first = items[0];",
+              "    pm.expect(first).to.have.property('id');",
+              "    pm.expect(first).to.have.property('name');",
+              "    pm.expect(first).to.have.property('basePrice');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products",
+          "host": ["{{baseUrl}}"],
+          "path": ["products"]
+        }
+      }
+    },
+    {
+      "name": "3. DIY Studio - Lấy danh mục tùy phối (Options)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code là 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Có đầy đủ teaBases, milks, sizes, toppings\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    var catalog = jsonData.data || jsonData;",
+              "    pm.expect(catalog).to.have.property('teaBases');",
+              "    pm.expect(catalog).to.have.property('milks');",
+              "    pm.expect(catalog).to.have.property('sizes');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/drinks/options",
+          "host": ["{{baseUrl}}"],
+          "path": ["drinks", "options"]
+        }
+      }
+    },
+    {
+      "name": "4. DIY Studio - Tính báo giá (Quote)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code là 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Báo giá trả về hợp lệ và giá > 0\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    var quote = jsonData.data || jsonData;",
+              "    pm.expect(quote).to.have.property('unitPrice');",
+              "    pm.expect(quote.unitPrice).to.be.above(0);",
+              "    pm.expect(quote.isValid).to.be.true;",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"teaBaseId\": \"black_tea\",\n  \"milkId\": \"fresh_milk\",\n  \"size\": \"M\",\n  \"sugarLevel\": \"50%\",\n  \"iceLevel\": \"70%\",\n  \"toppingIds\": [1],\n  \"quantity\": 1\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/drinks/quote",
+          "host": ["{{baseUrl}}"],
+          "path": ["drinks", "quote"]
+        }
+      }
+    },
+    {
+      "name": "5. Reviews - Lấy đánh giá gần đây từ DB",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code là 200 OK\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Đánh giá trả về danh sách\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    var list = jsonData.data || jsonData;",
+              "    pm.expect(list).to.be.an('array');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/products/reviews/recent?limit=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["products", "reviews", "recent"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. Auth - Kiểm tra endpoint Đăng nhập",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code không phải 500 Server Error\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 401]);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"emailOrPhone\": \"admin@milkyverse.vn\",\n  \"password\": \"Admin@123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "7. Orders - Kiểm tra endpoint Quản lý Đơn hàng",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code phản hồi hợp lệ\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 401]);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": ["{{baseUrl}}"],
+          "path": ["orders"]
+        }
+      }
+    },
+    {
+      "name": "8. AI Barista - Gợi ý đồ uống theo tâm trạng",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code phản hồi hợp lệ\", function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 400, 404]);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"prompt\": \"Hôm nay tôi mệt mỏi, gợi ý món trà sữa béo ngậy ít ngọt\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/ai/recommend",
+          "host": ["{{baseUrl}}"],
+          "path": ["ai", "recommend"]
+        }
+      }
+    }
+  ]
+}

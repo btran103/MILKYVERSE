@@ -134,9 +134,23 @@ public class ToppingDto
     public bool IsAvailable { get; set; }
 }
 
+public class ComboItemDto
+{
+    public int Id { get; set; }
+    public int IncludedProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string? ImageUrl { get; set; }
+    public decimal BasePrice { get; set; }
+    public string ProductType { get; set; } = "DRINK";
+    public int Quantity { get; set; } = 1;
+    public string CustomNotes { get; set; } = string.Empty;
+}
+
 public class ProductDetailDto : ProductDto
 {
     public List<ToppingDto> AvailableToppings { get; set; } = new();
+    public List<ComboItemDto> ComboItems { get; set; } = new();
     public List<string> Sizes { get; set; } = new() { "M", "L" };
     public List<string> SugarLevels { get; set; } = new() { "0%", "30%", "50%", "70%", "100%" };
     public List<string> IceLevels { get; set; } = new() { "0%", "30%", "50%", "70%", "100%" };

@@ -2820,7 +2820,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "Máº¹t viÃªn chiÃªn ngáº­p trÃ n cÃ¡ viÃªn, bÃ² viÃªn, tÃ´m viÃªn, há»“ lÃ´, xÃºc xÃ­ch vÃ  cháº£ giÃ² mini chiÃªn rÃ¡o dáº§u vÃ ng Ã³ng, Äƒn kÃ¨m dÆ°a leo giÃ²n vÃ  tÆ°Æ¡ng Ä‘en xÃ o Ä‘áº·c biá»‡t.",
             BasePrice = 65000,
-            ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/ca-vien-chien-thap-cam-met-lon.jpg",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
@@ -2837,7 +2837,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "CÃ¡ viÃªn chiÃªn giÃ²n thÆ¡m, dai ngá»t tá»± nhiÃªn, phá»“ng trÃ²n cháº¥m tÆ°Æ¡ng á»›t hoáº·c tÆ°Æ¡ng Ä‘en Ä‘áº­m vá»‹.",
             BasePrice = 25000,
-            ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/ca-vien-chien-truyen-thong.jpg",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
@@ -2854,7 +2854,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "BÃ² viÃªn gÃ¢n giÃ²n sáº§n sáº­t, thÆ¡m ngáº­y mÃ¹i tiÃªu Ä‘en vÃ  bÃ² tÆ°Æ¡i chiÃªn nÃ³ng sá»‘t.",
             BasePrice = 32000,
-            ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/bo-vien-chien-gan-gion.jpg",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
@@ -2871,7 +2871,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "Thá»‹t tÃ´m tÆ°Æ¡i xay nhuyá»…n táº¡o nÃªn viÃªn tÃ´m thÆ¡m ngáº­y vá»‹ ngá»t háº£i sáº£n.",
             BasePrice = 30000,
-            ImageUrl = "https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/tom-vien-chien-gion-rum.jpg",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
@@ -2888,7 +2888,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "Má»±c viÃªn dai ngá»t Ä‘áº­m Ä‘Ã  vá»‹ biá»ƒn, chiÃªn vÃ ng giÃ²n rÃ¡o dáº§u.",
             BasePrice = 32000,
-            ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/muc-vien-chien-nong.jpg",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
@@ -2905,7 +2905,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "Há»“ lÃ´ thá»‹t tÆ°Æ¡i ngá»t thÆ¡m má»¡ mÃ ng, chiÃªn giÃ²n vá» bÃªn ngoÃ i má»ng nÆ°á»›c bÃªn trong.",
             BasePrice = 35000,
-            ImageUrl = "https://images.unsplash.com/photo-1529042410759-befb1204b468?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/ho-lo-nuong-chien-gion.jpg",
             IsBestSeller = true,
             IsNew = true,
             IsActive = true,
@@ -2922,7 +2922,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "Lá»›p vá» ngoÃ i giÃ²n rá»¥m bao bá»c nhÃ¢n phÃ´ mai bÃ©o ngáº­y cháº£y trÃ n khi cáº¯n.",
             BasePrice = 38000,
-            ImageUrl = "https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/pho-mai-vien-chien-gion-tan.jpg",
             IsBestSeller = true,
             IsNew = true,
             IsActive = true,
@@ -2941,7 +2941,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "ChÃ¢n gÃ  tÆ°Æ¡i rÃºt xÆ°Æ¡ng giÃ²n sáº§n sáº­t tháº¥m Ä‘áº«m sá»‘t ThÃ¡i cay ná»“ng Ä‘áº­m vá»‹, xoÃ i xanh non, cÃ³c bao tá»­ vÃ  sáº£ táº¯c ngáº­p trÃ n hÆ°Æ¡ng thÆ¡m quyáº¿n rÅ©.",
             BasePrice = 69000,
-            ImageUrl = "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/chan-ga-rut-xuong-sot-thai-cay-gion.jpg",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
@@ -2960,7 +2960,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "ChÃ¢n gÃ  ngÃ¢m sáº£ táº¯c giÃ²n dai sáº§n sáº­t, hÆ°Æ¡ng thÆ¡m sáº£ cÃ¢y, lÃ¡ chanh vÃ  vá»‹ chua thanh mÃ¡t cá»§a táº¯c quáº£.",
             BasePrice = 65000,
-            ImageUrl = "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/chan-ga-ngam-sa-tac-truyen-thong.jpg",
             IsBestSeller = false,
             IsNew = false,
             IsActive = true,
@@ -2979,7 +2979,7 @@ public static class DbInitializer
             ProductType = "FOOD",
             Description = "CÃ¡nh gÃ  chiÃªn giÃ²n tan phá»§ Ä‘á»u lá»›p nÆ°á»›c máº¯m tá»i á»›t káº¹o ngá»t thÆ¡m ná»©c mÅ©i, Ä‘áº­m Ä‘Ã  khÃ³ cÆ°á»¡ng.",
             BasePrice = 58000,
-            ImageUrl = "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?w=800&auto=format&fit=crop&q=80",
+            ImageUrl = "/images/menu/canh-ga-chien-nuoc-mam-toi-ot.jpg",
             IsBestSeller = true,
             IsNew = false,
             IsActive = true,
@@ -3670,8 +3670,91 @@ public static class DbInitializer
         };
         products.AddRange(new[] { combo1, combo2, combo3, combo4, combo5, combo6, combo7, combo8, combo9, combo10, combo11, combo12, combo13 });
 
-        context.Products.AddRange(products);
+                context.Products.AddRange(products);
         await context.SaveChangesAsync();
+
+        // ==========================================
+        // 5.13 LINK REAL COMBO ITEMS (RELATIONAL COMBO BOM)
+        // ==========================================
+        if (!context.ComboItems.Any())
+        {
+            var pDrinkTraSua = products.FirstOrDefault(p => p.Slug == "tra-sua-truyen-thong") ?? p1;
+            var pDrinkTranChau = products.FirstOrDefault(p => p.Slug == "tra-sua-tran-chau-den") ?? p2;
+            var pDrinkThaiXanh = products.FirstOrDefault(p => p.Slug == "tra-sua-thai-xanh") ?? p1;
+            var pDrinkOolong = products.FirstOrDefault(p => p.Slug.Contains("oolong") || p.Slug.Contains("o-long")) ?? p1;
+            var pDrinkDaoCamSa = products.FirstOrDefault(p => p.Slug.Contains("dao") || p.Slug.Contains("tra-trai-cay")) ?? p1;
+            var pDrinkNuocEp = products.FirstOrDefault(p => p.Slug.Contains("nuoc-ep") || p.Slug.Contains("soda")) ?? p1;
+            var pDrinkMatcha = products.FirstOrDefault(p => p.Slug.Contains("matcha")) ?? p1;
+
+            var pFoodCaVien = products.FirstOrDefault(p => p.Slug == "ca-vien-chien-truyen-thong") ?? products.FirstOrDefault(p => p.Slug.Contains("ca-vien")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodKhoaiTay = products.FirstOrDefault(p => p.Slug.Contains("khoai-tay")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodBanhTrang = products.FirstOrDefault(p => p.Slug.Contains("banh-trang")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodChanGa = products.FirstOrDefault(p => p.Slug.Contains("chan-ga")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodPhoMai = products.FirstOrDefault(p => p.Slug.Contains("pho-mai")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodXucXich = products.FirstOrDefault(p => p.Slug.Contains("xuc-xich")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodMiCay = products.FirstOrDefault(p => p.Slug.Contains("mi-cay")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodComChien = products.FirstOrDefault(p => p.Slug.Contains("com")) ?? products.First(p => p.ProductType == "FOOD");
+            var pFoodGa = products.FirstOrDefault(p => p.Slug.Contains("ga-ran") || p.Slug.Contains("ga")) ?? products.First(p => p.ProductType == "FOOD");
+
+            var comboItems = new List<ComboItem>
+            {
+                // Combo 1: Trà sữa + Cá viên chiên
+                new() { ComboProductId = combo1.Id, IncludedProductId = pDrinkTranChau.Id, Quantity = 1, CustomNotes = "Trà sữa trân châu đen ngọt ngào béo ngậy (Size M)" },
+                new() { ComboProductId = combo1.Id, IncludedProductId = pFoodCaVien.Id, Quantity = 1, CustomNotes = "Cá viên chiên tương sa tế giòn nóng" },
+
+                // Combo 2: Trà sữa + Khoai tây chiên
+                new() { ComboProductId = combo2.Id, IncludedProductId = pDrinkThaiXanh.Id, Quantity = 1, CustomNotes = "Trà sữa Thái xanh thơm mát (Size M)" },
+                new() { ComboProductId = combo2.Id, IncludedProductId = pFoodKhoaiTay.Id, Quantity = 1, CustomNotes = "Khoai tây chiên lắc phô mai giòn rụm" },
+
+                // Combo 3: Trà sữa + Bánh tráng trộn
+                new() { ComboProductId = combo3.Id, IncludedProductId = pDrinkOolong.Id, Quantity = 1, CustomNotes = "Trà sữa Ô Long nướng khói đậm đà (Size M)" },
+                new() { ComboProductId = combo3.Id, IncludedProductId = pFoodBanhTrang.Id, Quantity = 1, CustomNotes = "Bánh tráng trộn bò khô tép sấy sốt sa tế đặc biệt" },
+
+                // Combo 4: Trà trái cây + Chân gà sả tắc
+                new() { ComboProductId = combo4.Id, IncludedProductId = pDrinkDaoCamSa.Id, Quantity = 1, CustomNotes = "Trà đào cam sả thơm lừng giải nhiệt (Size L)" },
+                new() { ComboProductId = combo4.Id, IncludedProductId = pFoodChanGa.Id, Quantity = 1, CustomNotes = "Chân gà ngâm sả tắc chua cay tê lưỡi" },
+
+                // Combo 5: Trà sữa + Phô mai que
+                new() { ComboProductId = combo5.Id, IncludedProductId = pDrinkTraSua.Id, Quantity = 1, CustomNotes = "Trà sữa truyền thống thượng hạng (Size M)" },
+                new() { ComboProductId = combo5.Id, IncludedProductId = pFoodPhoMai.Id, Quantity = 1, CustomNotes = "Phô mai que Mozzarella kéo sợi béo ngậy" },
+
+                // Combo 6: Trà sữa + Xúc xích chiên
+                new() { ComboProductId = combo6.Id, IncludedProductId = pDrinkTraSua.Id, Quantity = 1, CustomNotes = "Trà sữa truyền thống béo mộc (Size M)" },
+                new() { ComboProductId = combo6.Id, IncludedProductId = pFoodXucXich.Id, Quantity = 1, CustomNotes = "Xúc xích Đức xông khói chiên hoa mai" },
+
+                // Combo 7: Nước ép + Đồ ăn vặt
+                new() { ComboProductId = combo7.Id, IncludedProductId = pDrinkNuocEp.Id, Quantity = 1, CustomNotes = "Nước ép nguyên chất tươi mát (Size L)" },
+                new() { ComboProductId = combo7.Id, IncludedProductId = pFoodKhoaiTay.Id, Quantity = 1, CustomNotes = "Khoai tây chiên vàng ruộm" },
+
+                // Combo 8: Đồ uống + Mì cay
+                new() { ComboProductId = combo8.Id, IncludedProductId = pDrinkTraSua.Id, Quantity = 1, CustomNotes = "Trà sữa giải cay làm dịu vị giác (Size M)" },
+                new() { ComboProductId = combo8.Id, IncludedProductId = pFoodMiCay.Id, Quantity = 1, CustomNotes = "Mì cay Hàn Quốc hải sản 7 cấp độ" },
+
+                // Combo 9: Đồ uống + Cơm chiên
+                new() { ComboProductId = combo9.Id, IncludedProductId = pDrinkDaoCamSa.Id, Quantity = 1, CustomNotes = "Trà thanh nhiệt mát lạnh (Size M)" },
+                new() { ComboProductId = combo9.Id, IncludedProductId = pFoodComChien.Id, Quantity = 1, CustomNotes = "Cơm chiên Dương Châu nóng sốt thơm lừng" },
+
+                // Combo 10: Solo Treat
+                new() { ComboProductId = combo10.Id, IncludedProductId = pDrinkTranChau.Id, Quantity = 1, CustomNotes = "1 Ly trà sữa signature ngọt thanh" },
+                new() { ComboProductId = combo10.Id, IncludedProductId = pFoodCaVien.Id, Quantity = 1, CustomNotes = "1 Đĩa đồ ăn vặt nóng giòn chuẩn vị" },
+
+                // Combo 11: Đôi bạn
+                new() { ComboProductId = combo11.Id, IncludedProductId = pDrinkTraSua.Id, Quantity = 2, CustomNotes = "2 Ly trà sữa tươi thanh mát" },
+                new() { ComboProductId = combo11.Id, IncludedProductId = pFoodCaVien.Id, Quantity = 1, CustomNotes = "Mẹt cá viên chiên thập cẩm lớn" },
+
+                // Combo 12: Nhóm bạn
+                new() { ComboProductId = combo12.Id, IncludedProductId = pDrinkTranChau.Id, Quantity = 3, CustomNotes = "3 Ly trà sữa trân châu thơm béo" },
+                new() { ComboProductId = combo12.Id, IncludedProductId = pFoodKhoaiTay.Id, Quantity = 2, CustomNotes = "2 Mẹt đồ chiên tổng hợp" },
+
+                // Combo 13: Tự chọn đồ uống & đồ ăn
+                new() { ComboProductId = combo13.Id, IncludedProductId = pDrinkMatcha.Id, Quantity = 1, CustomNotes = "1 Món nước tùy chọn trong thực đơn" },
+                new() { ComboProductId = combo13.Id, IncludedProductId = pFoodGa.Id, Quantity = 1, CustomNotes = "1 Món ăn vặt tùy chọn theo sở thích" }
+            };
+
+            context.ComboItems.AddRange(comboItems);
+            await context.SaveChangesAsync();
+        }
+
 
         // ==========================================
         // 6. RECIPES FOR PRODUCTS (BOM / COSTING)
@@ -4075,6 +4158,87 @@ public static class DbInitializer
             Note = "ÄÆ¡n má»›i nháº­n trÃªn há»‡ thá»‘ng MilkyVerse",
             CreatedAt = DateTime.UtcNow.AddMinutes(-10)
         });
+
+        
+        // ==========================================
+        // 11. INITIAL PRODUCT REVIEWS IN DATABASE
+        // ==========================================
+        if (!context.ProductReviews.Any())
+        {
+            var sampleCustomer = await context.Users.FirstOrDefaultAsync(u => u.Role == "Customer") ?? admin;
+            var revProduct1 = products.FirstOrDefault(p => p.Slug == "tra-sua-tran-chau-den") ?? p1;
+            var revProduct2 = products.FirstOrDefault(p => p.Slug.Contains("mi-cay")) ?? p1;
+            var revProduct3 = products.FirstOrDefault(p => p.Slug.Contains("oolong")) ?? p1;
+            var revProduct4 = products.FirstOrDefault(p => p.Slug.Contains("ca-vien")) ?? p1;
+            var revProduct5 = products.FirstOrDefault(p => p.Slug.Contains("combo")) ?? p1;
+
+            var initialReviews = new List<ProductReview>
+            {
+                new()
+                {
+                    ProductId = revProduct1.Id,
+                    UserId = sampleCustomer.Id,
+                    UserName = "Trần Bảo Ngọc",
+                    UserAvatar = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+                    Rating = 5,
+                    Verdict = "Rất ngon / Chuẩn vị",
+                    Comment = "Trà sữa nướng trân châu hoàng kim đỉnh chóp! Trân châu mềm dẻo thấm vị đường đen, vị trà đậm đà không bị ngọt gắt.",
+                    IsVerifiedPurchase = true,
+                    CreatedAt = DateTime.UtcNow.AddHours(-3)
+                },
+                new()
+                {
+                    ProductId = revProduct2.Id,
+                    UserId = sampleCustomer.Id,
+                    UserName = "Lê Minh Quân",
+                    UserAvatar = "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80",
+                    Rating = 5,
+                    Verdict = "Hương vị đậm đà",
+                    Comment = "Mì cay 7 cấp độ ăn kèm trà dâu macchiato là combo chân ái luôn. Cửa hàng giao nhanh đúng 20 phút là có hàng nóng hổi.",
+                    IsVerifiedPurchase = true,
+                    CreatedAt = DateTime.UtcNow.AddDays(-1)
+                },
+                new()
+                {
+                    ProductId = revProduct3.Id,
+                    UserId = sampleCustomer.Id,
+                    UserName = "Hoàng Yến Nhi",
+                    UserAvatar = "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80",
+                    Rating = 5,
+                    Verdict = "Cực kỳ hài lòng",
+                    Comment = "Món signature hôm nay ngon xuất sắc, lớp kem cheese béo mặn sánh mịn, uống kèm trân châu 3Q giòn sần sật cực mê!",
+                    IsVerifiedPurchase = true,
+                    CreatedAt = DateTime.UtcNow.AddDays(-2)
+                },
+                new()
+                {
+                    ProductId = revProduct4.Id,
+                    UserId = sampleCustomer.Id,
+                    UserName = "Đặng Tuấn Anh",
+                    UserAvatar = "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80",
+                    Rating = 5,
+                    Verdict = "Đáng đồng tiền",
+                    Comment = "Cá viên chiên mẹt thập cẩm sốt Thái đậm đà, nước sốt chấm thần thánh ăn cuốn miệng dã man. 5 sao cho chất lượng phục vụ!",
+                    IsVerifiedPurchase = true,
+                    CreatedAt = DateTime.UtcNow.AddDays(-3)
+                },
+                new()
+                {
+                    ProductId = revProduct5.Id,
+                    UserId = sampleCustomer.Id,
+                    UserName = "Nguyễn Thảo Ly",
+                    UserAvatar = "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80",
+                    Rating = 5,
+                    Verdict = "Combo siêu tiết kiệm",
+                    Comment = "Combo ăn kèm vừa no bụng vừa tiết kiệm được 25k, trà sữa đậm vị trà còn đồ ăn vặt thì giao đến vẫn nóng giòn!",
+                    IsVerifiedPurchase = true,
+                    CreatedAt = DateTime.UtcNow.AddDays(-4)
+                }
+            };
+
+            context.ProductReviews.AddRange(initialReviews);
+            await context.SaveChangesAsync();
+        }
 
         await context.SaveChangesAsync();
     }

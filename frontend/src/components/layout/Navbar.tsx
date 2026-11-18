@@ -87,37 +87,34 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-50 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#EFE6DC] transition-all">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          {/* 1. Brand Logo */}
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="relative w-12 h-12 rounded-full overflow-hidden bg-white border border-[#EFE6DC] shadow-md shadow-[#6F4E37]/15 group-hover:scale-105 transition-transform flex items-center justify-center p-0.5">
-              <Image
-                src="/logo.png"
-                alt="MilkyVerse Logo"
-                width={48}
-                height={48}
-                className="w-full h-full object-cover rounded-full"
-                priority
-              />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-2xl tracking-wider bg-gradient-to-r from-[#4A3324] via-[#6F4E37] to-[#8B5A2B] bg-clip-text text-transparent">
+      <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-20 gap-2 sm:gap-4 lg:gap-6">
+          {/* 1. Brand Logo (Left - Gọn gàng, không bị tràn hay đè lên Menu) */}
+          <div className="flex items-center justify-start shrink-0">
+            <Link href="/" className="flex items-center gap-2.5 sm:gap-3 group shrink-0">
+              <div className="relative w-10 h-10 lg:w-11 lg:h-11 rounded-full overflow-hidden bg-white border border-[#EFE6DC] shadow-md shadow-[#6F4E37]/15 group-hover:scale-105 transition-transform flex items-center justify-center p-0.5 shrink-0">
+                <Image
+                  src="/logo.png"
+                  alt="MilkyVerse Logo"
+                  width={44}
+                  height={44}
+                  className="w-full h-full object-cover rounded-full"
+                  priority
+                />
+              </div>
+              <div className="shrink-0 flex flex-col justify-center leading-tight">
+                <span className="font-extrabold text-xl lg:text-2xl tracking-wider bg-gradient-to-r from-[#4A3324] via-[#6F4E37] to-[#8B5A2B] bg-clip-text text-transparent whitespace-nowrap">
                   MILKYVERSE
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded bg-[#F7D6D0] text-[#6F4E37]">
-                  FOOD & DRINK
-                </span>
+                <p className="text-[10.5px] text-[#786C65] tracking-wide font-medium whitespace-nowrap">
+                  Trà Sữa Tươi & Đồ Ăn Vặt Nóng Giòn
+                </p>
               </div>
-              <p className="text-[11px] text-[#786C65] tracking-wide font-medium">
-                Vũ Trụ Trà Sữa Tươi & Đồ Ăn Vặt Nóng Giòn
-              </p>
-            </div>
-          </Link>
+            </Link>
+          </div>
 
-          {/* 2. Desktop Navigation */}
-          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+          {/* 2. Desktop Navigation (Center - CHÍNH DIỆN, ĐẦY ĐỦ KHÔNG BỊ CẮT CHỮ) */}
+          <nav className="hidden lg:flex items-center justify-center gap-1 xl:gap-2 shrink-0">
             {navLinks.map((item) => {
               const isActive = pathname === item.href;
               const Icon = item.icon;
@@ -125,7 +122,7 @@ export const Navbar: React.FC = () => {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`relative inline-flex items-center justify-center gap-2 h-10 px-3.5 rounded-xl text-sm font-semibold transition-all leading-none ${
+                  className={`relative inline-flex items-center justify-center gap-1.5 h-10 px-2.5 xl:px-3 rounded-xl text-xs xl:text-sm font-semibold transition-all leading-none shrink-0 whitespace-nowrap ${
                     isActive
                       ? "text-[#6F4E37] bg-[#F7D6D0]/40 shadow-sm"
                       : "text-[#2D2522] hover:text-[#6F4E37] hover:bg-[#FAF7F2]"
@@ -135,7 +132,7 @@ export const Navbar: React.FC = () => {
                   <span className="leading-none whitespace-nowrap">{item.label}</span>
                   {item.badge && (
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none flex items-center justify-center ${
+                      className={`text-[9px] xl:text-[10px] font-bold px-1.5 xl:px-2 py-0.5 rounded-full leading-none flex items-center justify-center whitespace-nowrap shrink-0 ${
                         item.highlight
                           ? "bg-[#6F4E37] text-white animate-subtle"
                           : "bg-[#F7D6D0] text-[#6F4E37]"
@@ -149,8 +146,8 @@ export const Navbar: React.FC = () => {
             })}
           </nav>
 
-          {/* 3. Actions: Cart & User & Quick Role Badges */}
-          <div className="flex items-center gap-3">
+          {/* 3. Actions: Cart & User & Quick Role Badges (Right - shrink-0) */}
+          <div className="flex items-center justify-end gap-2 sm:gap-3 shrink-0">
             {/* Quick role shortcuts for logged-in staff */}
             {mounted && user && user.role !== "Customer" && (
               <div className="hidden lg:flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-2xl border border-[#EFE6DC] h-10">
@@ -380,7 +377,7 @@ export const Navbar: React.FC = () => {
             {/* Mobile menu trigger */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-[#2D2522] hover:text-[#6F4E37]"
+              className="lg:hidden p-2 text-[#2D2522] hover:text-[#6F4E37]"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <MenuIcon className="w-6 h-6" />}
             </button>
@@ -389,7 +386,7 @@ export const Navbar: React.FC = () => {
 
         {/* Mobile menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 border-t border-[#EFE6DC] space-y-2">
+          <div className="lg:hidden py-4 border-t border-[#EFE6DC] space-y-2">
             {navLinks.map((item) => (
               <Link
                 key={item.href}

@@ -11,13 +11,91 @@ import {
   Plus,
   Minus,
   RefreshCw,
+  AlertCircle,
 } from "lucide-react";
+
+const FALLBACK_CATALOG: DIYCatalog = {
+  teaBases: [
+    { id: "black_tea", name: "Hồng Trà Ceylon Thượng Hạng", description: "Đậm đà nồng nàn, thơm hương hoa quả khô và hậu vị ngọt sâu", additionalPrice: 28000, colorHex: "#8B4513" },
+    { id: "green_tea", name: "Lục Trà Lài Thanh Khiết", description: "Thơm ngát hương hoa nhài mùa hạ, thanh thoát và dịu nhẹ", additionalPrice: 28000, colorHex: "#6B8E23" },
+    { id: "oolong_tea", name: "Trà Ô Long Rang Khói Thảo Mộc", description: "Hương thơm rang mộc đặc trưng từ than hồng, vị dày béo tròn vị", additionalPrice: 32000, colorHex: "#A0522D" },
+    { id: "matcha_base", name: "Matcha Uji Kyoto Nguyên Chất", description: "100% bột matcha Nhật Bản thượng hạng, béo mộc tự nhiên", additionalPrice: 36000, colorHex: "#2E8B57" }
+  ],
+  milks: [
+    { id: "fresh_milk", name: "Sữa Tươi Thanh Trùng Dalat", description: "Tươi mát nguyên chất, béo nhẹ thanh tao", additionalPrice: 12000, colorHex: "#FFFDF0" },
+    { id: "condensed_milk", name: "Sữa Đặc Kem Béo Truyền Thống", description: "Vị ngọt béo đậm đà chuẩn gu trà sữa cổ điển", additionalPrice: 10000, colorHex: "#FBF4D9" },
+    { id: "oat_milk", name: "Sữa Yến Mạch Oatly (Thuần Chay)", description: "Không lactose, tốt cho sức khỏe, thơm bùi ngậy nhẹ", additionalPrice: 18000, colorHex: "#EADCC2" },
+    { id: "almond_milk", name: "Sữa Hạnh Nhân Hữu Cơ", description: "Thơm bùi tự nhiên, ít calo, giàu vitamin E", additionalPrice: 20000, colorHex: "#EDE0D4" }
+  ],
+  sizes: [
+    { id: "M", name: "Size Vừa (M - 500ml)", description: "Kích thước tiêu chuẩn phù hợp thưởng thức đơn", additionalPrice: 0 },
+    { id: "L", name: "Size Lớn (L - 700ml)", description: "Uống đã hơn, tăng 40% thể tích cốt trà & sữa", additionalPrice: 8000 }
+  ],
+  sweetnessLevels: [
+    { id: "0%", name: "0% Đường (Không ngọt)", description: "Giữ trọn vị nguyên bản đậm đà của trà và sữa", additionalPrice: 0 },
+    { id: "30%", name: "30% Đường (Ít ngọt)", description: "Ngọt thanh nhè nhẹ, phù hợp lối sống lành mạnh", additionalPrice: 0 },
+    { id: "50%", name: "50% Đường (Vừa phải)", description: "Cân bằng lý tưởng giữa vị trà, độ béo và vị ngọt", additionalPrice: 0 },
+    { id: "70%", name: "70% Đường (Ngọt dịu)", description: "Vị ngọt dịu dàng lan tỏa", additionalPrice: 0 },
+    { id: "100%", name: "100% Đường (Chuẩn vị)", description: "Độ ngọt tiêu chuẩn truyền thống đậm đà", additionalPrice: 0 }
+  ],
+  iceLevels: [
+    { id: "0%", name: "0% Đá (Không đá)", description: "Giữ trọn ly trà không bị loãng", additionalPrice: 0 },
+    { id: "30%", name: "30% Đá (Ít đá)", description: "Mát nhẹ, vị trà sữa cô đọng", additionalPrice: 0 },
+    { id: "50%", name: "50% Đá (Vừa)", description: "Mát lạnh sảng khoái", additionalPrice: 0 },
+    { id: "70%", name: "70% Đá", description: "Lạnh sâu kích thích vị giác", additionalPrice: 0 },
+    { id: "100%", name: "100% Đá (Đá chuẩn)", description: "Mát lạnh cực đã xua tan nắng nóng", additionalPrice: 0 }
+  ],
+  toppings: [
+    { id: 1, name: "Trân Châu Hoàng Kim Nấu Mật", price: 8000, isAvailable: true },
+    { id: 2, name: "Trân Châu Đen Đường Đen Nướng", price: 10000, isAvailable: true },
+    { id: 3, name: "Thạch Dừa Giòn Băng Tuyết", price: 8000, isAvailable: true },
+    { id: 4, name: "Pudding Trứng Vàng Béo Ngậy", price: 10000, isAvailable: true },
+    { id: 5, name: "Kem Phô Mai Macchiato Mặn Ngọt", price: 12000, isAvailable: true }
+  ]
+};
+
+function calculateLocalQuote(
+  cat: DIYCatalog,
+  teaId: string,
+  milkId: string,
+  sizeId: string,
+  sugar: string,
+  ice: string,
+  toppingIds: number[],
+  qty: number
+): DIYQuoteResponse {
+  const tea = cat.teaBases.find((t) => t.id === teaId) || cat.teaBases[0];
+  const milk = cat.milks.find((m) => m.id === milkId) || cat.milks[0];
+  const size = cat.sizes.find((s) => s.id === sizeId) || cat.sizes[0];
+  const chosenToppings = (cat.toppings || []).filter((t) => toppingIds.includes(t.Id ?? t.id));
+
+  const toppingTotal = chosenToppings.reduce((sum, t) => sum + (t.Price ?? t.price ?? 0), 0);
+  const unitPrice = (tea?.additionalPrice || 0) + (milk?.additionalPrice || 0) + (size?.additionalPrice || 0) + toppingTotal;
+  const totalPrice = unitPrice * qty;
+
+  const breakdown = [
+    `${tea?.name}: ${(tea?.additionalPrice || 0).toLocaleString("vi-VN")}đ`,
+    `${milk?.name}: ${(milk?.additionalPrice || 0).toLocaleString("vi-VN")}đ`,
+    size?.additionalPrice ? `${size.name}: +${size.additionalPrice.toLocaleString("vi-VN")}đ` : `${size.name}`,
+    ...chosenToppings.map(t => `${t.Name ?? t.name}: +${(t.Price ?? t.price).toLocaleString("vi-VN")}đ`)
+  ];
+
+  return {
+    recipeName: `${tea?.name || "Trà"} x ${milk?.name || "Sữa"}`,
+    unitPrice,
+    quantity: 1,
+    totalPrice,
+    breakdown,
+    isValid: true,
+  };
+}
 
 export default function DIYDrinkStudioPage() {
   const { addItem } = useCart();
 
   const [catalog, setCatalog] = useState<DIYCatalog | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [isBackendOffline, setIsBackendOffline] = useState(false);
 
   // DIY Selections
   const [selectedTea, setSelectedTea] = useState<string>("black_tea");
@@ -38,13 +116,21 @@ export default function DIYDrinkStudioPage() {
     async function loadCatalog() {
       try {
         const data = await api.getDIYCatalog();
-        setCatalog(data);
-        if (data?.toppings?.length) {
-          // Pre-select first topping for nice preview
-          setSelectedToppingIds([data.toppings[0].Id ?? data.toppings[0].id]);
+        if (data && data.teaBases && data.teaBases.length > 0) {
+          setCatalog(data);
+          setIsBackendOffline(false);
+          if (data?.toppings?.length) {
+            setSelectedToppingIds([data.toppings[0].Id ?? data.toppings[0].id]);
+          }
+        } else {
+          setCatalog(FALLBACK_CATALOG);
+          setSelectedToppingIds([FALLBACK_CATALOG.toppings[0].id]);
         }
       } catch (err) {
-        console.error("Lỗi khi tải danh mục DIY:", err);
+        console.warn("Chưa kết nối được máy chủ Backend, sử dụng danh mục DIY dự phòng:", err);
+        setIsBackendOffline(true);
+        setCatalog(FALLBACK_CATALOG);
+        setSelectedToppingIds([FALLBACK_CATALOG.toppings[0].id]);
       } finally {
         setLoadingCatalog(false);
       }
@@ -54,7 +140,7 @@ export default function DIYDrinkStudioPage() {
 
   // Request backend verification and quote whenever choices change
   useEffect(() => {
-    if (!catalog) return;
+    const currentCatalog = catalog || FALLBACK_CATALOG;
 
     let isMounted = true;
     async function fetchQuote() {
@@ -72,9 +158,24 @@ export default function DIYDrinkStudioPage() {
 
         if (isMounted) {
           setQuote(quoteRes);
+          setIsBackendOffline(false);
         }
       } catch (err) {
-        console.error("Lỗi báo giá DIY:", err);
+        // Fallback to local calculation if backend is unreachable
+        if (isMounted) {
+          setIsBackendOffline(true);
+          const localQuote = calculateLocalQuote(
+            currentCatalog,
+            selectedTea,
+            selectedMilk,
+            selectedSize,
+            selectedSugar,
+            selectedIce,
+            selectedToppingIds,
+            quantity
+          );
+          setQuote(localQuote);
+        }
       } finally {
         if (isMounted) setQuoting(false);
       }
@@ -160,6 +261,19 @@ export default function DIYDrinkStudioPage() {
         </p>
       </div>
 
+      {/* Backend Offline Warning Banner */}
+      {isBackendOffline && (
+        <div className="max-w-3xl mx-auto p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3 shadow-sm text-sm">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold">Đang hoạt động ở chế độ ngoại tuyến (Chưa kết nối máy chủ Backend:5000)</p>
+            <p className="text-xs text-amber-800">
+              Bạn vẫn có thể tự phối trà sữa và tính giá dự phòng bình thường. Để kết nối cơ sở dữ liệu và đặt hàng trực tiếp, vui lòng chạy file <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono font-bold">run-backend.bat</code>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Studio Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
         {/* Left Column: Visual Cup Preview */}
@@ -180,9 +294,8 @@ export default function DIYDrinkStudioPage() {
 
             {/* Cup Container */}
             <div
-              className={`relative w-44 rounded-b-3xl border-4 border-white/80 shadow-2xl overflow-hidden backdrop-blur-sm transition-all duration-500 ${
-                selectedSize === "L" ? "h-64" : "h-56"
-              }`}
+              className={`relative w-44 rounded-b-3xl border-4 border-white/80 shadow-2xl overflow-hidden backdrop-blur-sm transition-all duration-500 ${selectedSize === "L" ? "h-64" : "h-56"
+                }`}
               style={{
                 background: "linear-gradient(to bottom, rgba(255,255,255,0.4), rgba(255,255,255,0.1))",
                 boxShadow: "0 20px 40px -15px rgba(111, 78, 55, 0.25)",
@@ -283,11 +396,10 @@ export default function DIYDrinkStudioPage() {
               type="button"
               onClick={handleAddToCart}
               disabled={!quote?.isValid || quoting}
-              className={`w-full py-3.5 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md ${
-                added
+              className={`w-full py-3.5 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md ${added
                   ? "bg-[#4E7D55] text-white"
                   : "bg-[#6F4E37] text-white hover:bg-[#4A3324]"
-              }`}
+                }`}
             >
               {added ? (
                 <>
@@ -324,11 +436,10 @@ export default function DIYDrinkStudioPage() {
                     key={tea.id}
                     type="button"
                     onClick={() => setSelectedTea(tea.id)}
-                    className={`p-4 rounded-2xl border text-left transition-all ${
-                      isSelected
+                    className={`p-4 rounded-2xl border text-left transition-all ${isSelected
                         ? "border-[#6F4E37] bg-[#F7D6D0]/30 shadow-sm ring-1 ring-[#6F4E37]"
                         : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between font-bold text-sm text-[#2D2522]">
                       <span className="flex items-center gap-2">
@@ -367,11 +478,10 @@ export default function DIYDrinkStudioPage() {
                     key={milk.id}
                     type="button"
                     onClick={() => setSelectedMilk(milk.id)}
-                    className={`p-4 rounded-2xl border text-left transition-all ${
-                      isSelected
+                    className={`p-4 rounded-2xl border text-left transition-all ${isSelected
                         ? "border-[#6F4E37] bg-[#F7D6D0]/30 shadow-sm ring-1 ring-[#6F4E37]"
                         : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between font-bold text-sm text-[#2D2522]">
                       <span>{milk.name}</span>
@@ -402,11 +512,10 @@ export default function DIYDrinkStudioPage() {
                     key={s.id}
                     type="button"
                     onClick={() => setSelectedSize(s.id)}
-                    className={`p-3.5 rounded-2xl border text-left transition-all ${
-                      isSelected
+                    className={`p-3.5 rounded-2xl border text-left transition-all ${isSelected
                         ? "border-[#6F4E37] bg-[#F7D6D0]/30 shadow-sm ring-1 ring-[#6F4E37]"
                         : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between font-bold text-sm text-[#2D2522]">
                       <span>{s.name}</span>
@@ -435,11 +544,10 @@ export default function DIYDrinkStudioPage() {
                     key={sugar}
                     type="button"
                     onClick={() => setSelectedSugar(sugar)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                      selectedSugar === sugar
+                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${selectedSugar === sugar
                         ? "border-[#6F4E37] bg-[#6F4E37] text-white shadow-sm"
                         : "border-[#EFE6DC] bg-white text-[#2D2522] hover:bg-[#FAF7F2]"
-                    }`}
+                      }`}
                   >
                     {sugar}
                   </button>
@@ -458,11 +566,10 @@ export default function DIYDrinkStudioPage() {
                     key={ice}
                     type="button"
                     onClick={() => setSelectedIce(ice)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                      selectedIce === ice
+                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${selectedIce === ice
                         ? "border-[#6F4E37] bg-[#6F4E37] text-white shadow-sm"
                         : "border-[#EFE6DC] bg-white text-[#2D2522] hover:bg-[#FAF7F2]"
-                    }`}
+                      }`}
                   >
                     {ice}
                   </button>
@@ -492,17 +599,15 @@ export default function DIYDrinkStudioPage() {
                     key={tId}
                     type="button"
                     onClick={() => toggleTopping(tId)}
-                    className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between ${
-                      isChecked
+                    className={`p-3.5 rounded-2xl border text-left transition-all flex items-center justify-between ${isChecked
                         ? "border-[#6F4E37] bg-[#F7D6D0]/30 text-[#6F4E37] ring-1 ring-[#6F4E37]"
                         : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2] text-[#2D2522]"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <div
-                        className={`w-4 h-4 rounded-md border flex items-center justify-center ${
-                          isChecked ? "bg-[#6F4E37] border-[#6F4E37] text-white" : "border-[#786C65]"
-                        }`}
+                        className={`w-4 h-4 rounded-md border flex items-center justify-center ${isChecked ? "bg-[#6F4E37] border-[#6F4E37] text-white" : "border-[#786C65]"
+                          }`}
                       >
                         {isChecked && <Check className="w-3 h-3" />}
                       </div>

@@ -16,6 +16,7 @@ public interface IProductService
     Task<ApiResponse<ProductDto>> UpdateProductAsync(int id, UpdateProductRequest request);
     Task<ApiResponse<bool>> DeleteProductAsync(int id);
     Task<ApiResponse<List<ProductReviewDto>>> GetReviewsAsync(int productId);
+    Task<ApiResponse<List<ProductReviewDto>>> GetAllRecentReviewsAsync(int limit = 10);
     Task<ApiResponse<ProductReviewDto>> AddReviewAsync(int productId, int userId, string userName, string? userAvatar, CreateProductReviewRequest request);
 }
 
@@ -216,6 +217,27 @@ public class ProductService : IProductService
 
         double avgRating = reviews.Any() ? Math.Round(reviews.Average(r => r.Rating), 1) : 5.0;
 
+        var comboItems = new List<ComboItemDto>();
+        if (p.ProductType == "COMBO")
+        {
+            comboItems = await _context.ComboItems
+                .Where(c => c.ComboProductId == p.Id)
+                .Include(c => c.IncludedProduct)
+                .Select(c => new ComboItemDto
+                {
+                    Id = c.Id,
+                    IncludedProductId = c.IncludedProductId,
+                    ProductName = c.IncludedProduct != null ? c.IncludedProduct.Name : "",
+                    Slug = c.IncludedProduct != null ? c.IncludedProduct.Slug : "",
+                    ImageUrl = c.IncludedProduct != null ? c.IncludedProduct.ImageUrl : "",
+                    BasePrice = c.IncludedProduct != null ? c.IncludedProduct.BasePrice : 0,
+                    ProductType = c.IncludedProduct != null ? c.IncludedProduct.ProductType : "DRINK",
+                    Quantity = c.Quantity,
+                    CustomNotes = c.CustomNotes
+                })
+                .ToListAsync();
+        }
+
         // Auto-generate realistic ingredient list based on product type & name
         var ingredients = new List<string>();
         var nameLower = (p.Name ?? "").ToLower();
@@ -293,6 +315,7 @@ public class ProductService : IProductService
             DefaultSauce = p.DefaultSauce,
             PortionDescription = p.PortionDescription,
             AvailableToppings = toppings,
+            ComboItems = comboItems,
             Sizes = p.ProductType == "DRINK" ? new List<string> { "M", "L" } : new List<string> { "Standard" },
             SugarLevels = new List<string> { "0%", "30%", "50%", "70%", "100%" },
             IceLevels = new List<string> { "0% (Không đá)", "30%", "50%", "70%", "100% (Đá chuẩn)" },
@@ -446,6 +469,36 @@ public class ProductService : IProductService
             var reviews = await _context.ProductReviews
                 .Where(r => r.ProductId == productId)
                 .OrderByDescending(r => r.CreatedAt)
+                .Select(r => new ProductReviewDto
+                {
+                    Id = r.Id,
+                    ProductId = r.ProductId,
+                    UserId = r.UserId,
+                    UserName = r.UserName,
+                    UserAvatar = r.UserAvatar,
+                    Rating = r.Rating,
+                    Verdict = r.Verdict,
+                    Comment = r.Comment,
+                    IsVerifiedPurchase = r.IsVerifiedPurchase,
+                    CreatedAt = r.CreatedAt
+                })
+                .ToListAsync();
+
+            return ApiResponse<List<ProductReviewDto>>.Ok(reviews);
+        }
+        catch
+        {
+            return ApiResponse<List<ProductReviewDto>>.Ok(new List<ProductReviewDto>());
+        }
+    }
+
+    public async Task<ApiResponse<List<ProductReviewDto>>> GetAllRecentReviewsAsync(int limit = 10)
+    {
+        try
+        {
+            var reviews = await _context.ProductReviews
+                .OrderByDescending(r => r.CreatedAt)
+                .Take(limit)
                 .Select(r => new ProductReviewDto
                 {
                     Id = r.Id,

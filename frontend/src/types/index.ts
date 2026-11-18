@@ -106,8 +106,22 @@ export interface ProductReview {
   createdAt: string;
 }
 
+export interface ComboItem {
+  id: number;
+  comboProductId?: number;
+  includedProductId: number;
+  productName: string;
+  slug?: string;
+  imageUrl?: string;
+  basePrice?: number;
+  productType?: "DRINK" | "FOOD" | "COMBO";
+  quantity: number;
+  customNotes?: string;
+}
+
 export interface ProductDetail extends Product {
   availableToppings: Topping[];
+  comboItems?: ComboItem[];
   sizes: string[];
   sugarLevels: string[];
   iceLevels: string[];

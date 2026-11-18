@@ -90,6 +90,7 @@ export const api = {
   getProductById: (id: number) => request<ProductDetail>(`/products/${id}`),
   getToppings: () => request<Topping[]>("/products/toppings"),
   getProductReviews: (productId: number) => request<ProductReview[]>(`/products/${productId}/reviews`),
+  getRecentReviews: (limit = 10) => request<ProductReview[]>(`/products/reviews/recent?limit=${limit}`),
   createProductReview: (productId: number, payload: { rating: number; verdict?: string; comment: string }) =>
     request<ProductReview>(`/products/${productId}/reviews`, { method: "POST", body: JSON.stringify(payload) }),
 
