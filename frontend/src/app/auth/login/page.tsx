@@ -104,6 +104,12 @@ export default function LoginPage() {
               <label className="text-xs font-bold text-[#2D2522]">
                 Mật khẩu
               </label>
+              <Link
+                href="/auth/forgot-password"
+                className="text-[11px] font-semibold text-[#6F4E37] hover:underline"
+              >
+                Quên mật khẩu?
+              </Link>
             </div>
             <div className="relative">
               <input

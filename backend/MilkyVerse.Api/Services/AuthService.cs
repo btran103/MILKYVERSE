@@ -13,6 +13,7 @@ public interface IAuthService
 {
     Task<ApiResponse<SendOtpResultDto>> SendEmailOtpAsync(string email);
     Task<ApiResponse<bool>> VerifyEmailOtpAsync(string email, string code);
+    Task<ApiResponse<bool>> ResetPasswordAsync(ResetPasswordRequest request);
     Task<ApiResponse<AuthResponse>> RegisterAsync(RegisterRequest request);
     Task<ApiResponse<AuthResponse>> LoginAsync(LoginRequest request);
     Task<ApiResponse<UserProfileDto>> GetProfileAsync(int userId);
@@ -139,6 +140,50 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync();
 
         return ApiResponse<bool>.Ok(true, "Xác thực email thành công!");
+    }
+
+    public async Task<ApiResponse<bool>> ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            return ApiResponse<bool>.Fail("Vui lòng điền đầy đủ email, mã OTP và mật khẩu mới.");
+        }
+
+        var normalizedEmail = request.Email.Trim().ToLower();
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
+        if (user == null)
+        {
+            return ApiResponse<bool>.Fail("Không tìm thấy tài khoản với email này.");
+        }
+
+        if (!IsPasswordStrong(request.NewPassword, out var passError))
+        {
+            return ApiResponse<bool>.Fail(passError);
+        }
+
+        var cleanCode = request.Code.Trim();
+        var record = await _context.EmailVerifications
+            .Where(v => v.Email == normalizedEmail && v.Code == cleanCode && !v.IsUsed)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (record == null)
+        {
+            return ApiResponse<bool>.Fail("Mã xác thực OTP không chính xác hoặc đã sử dụng.");
+        }
+
+        if (DateTime.UtcNow > record.ExpiresAt)
+        {
+            return ApiResponse<bool>.Fail("Mã xác thực OTP đã hết hạn (quá 10 phút). Vui lòng yêu cầu mã mới.");
+        }
+
+        record.IsUsed = true;
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return ApiResponse<bool>.Ok(true, "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới.");
     }
 
     public async Task<ApiResponse<AuthResponse>> RegisterAsync(RegisterRequest request)

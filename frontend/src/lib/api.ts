@@ -61,6 +61,9 @@ export const api = {
   verifyOtp: (email: string, code: string) =>
     request<{ message: string }>("/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, code }) }),
 
+  resetPassword: (payload: { email: string; code: string; newPassword: string }) =>
+    request<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify(payload) }),
+
   register: (payload: { fullName: string; email: string; password: string; verificationCode?: string; phoneNumber?: string; address?: string }) =>
     request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
 

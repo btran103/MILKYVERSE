@@ -19,9 +19,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Zap,
+  Heart,
 } from "lucide-react";
+import { getFavoriteIds, toggleFavorite, subscribeFavorites } from "@/lib/favorites";
 
-type MainTabType = "ALL" | "DRINK" | "FOOD" | "COMBO";
+type MainTabType = "ALL" | "DRINK" | "FOOD" | "COMBO" | "FAVORITES";
 
 function MenuContent() {
   const searchParams = useSearchParams();
@@ -39,7 +41,18 @@ function MenuContent() {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("default");
+  const [priceRange, setPriceRange] = useState<"ALL" | "UNDER_35" | "35_TO_50" | "OVER_50">("ALL");
+  const [favIds, setFavIds] = useState<number[]>([]);
   const [addedId, setAddedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    setFavIds(getFavoriteIds());
+    return subscribeFavorites((ids) => setFavIds(ids));
+  }, []);
+
+  const handleToggleFav = (id: number) => {
+    toggleFavorite(id);
+  };
 
   // Pagination (12 items per page)
   const ITEMS_PER_PAGE = 12;
@@ -56,7 +69,7 @@ function MenuContent() {
           api.getCategories(),
           api.getProducts({
             categoryId: selectedCatId || undefined,
-            productType: activeTab !== "ALL" ? activeTab : undefined,
+            productType: activeTab !== "ALL" && activeTab !== "FAVORITES" ? activeTab : undefined,
             search: searchQuery.trim() || undefined,
             sortBy: sortBy !== "default" ? sortBy : undefined,
           }),
@@ -98,12 +111,24 @@ function MenuContent() {
     setCurrentPage(1);
   };
 
-  const totalItems = products.length;
+  const filteredProducts = products.filter((p) => {
+    const id = p.Id ?? p.id;
+    if (activeTab === "FAVORITES" && !favIds.includes(id)) {
+      return false;
+    }
+    const price = p.BasePrice ?? p.basePrice ?? 0;
+    if (priceRange === "UNDER_35" && price >= 35000) return false;
+    if (priceRange === "35_TO_50" && (price < 35000 || price > 50000)) return false;
+    if (priceRange === "OVER_50" && price <= 50000) return false;
+    return true;
+  });
+
+  const totalItems = filteredProducts.length;
   const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE) || 1;
   const validPage = Math.min(Math.max(1, currentPage), totalPages);
   const startIndex = (validPage - 1) * ITEMS_PER_PAGE;
   const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
-  const paginatedProducts = products.slice(startIndex, endIndex);
+  const paginatedProducts = filteredProducts.slice(startIndex, endIndex);
 
   const handlePageChange = (newPage: number) => {
     if (newPage < 1 || newPage > totalPages) return;
@@ -222,7 +247,7 @@ function MenuContent() {
       </div>
 
       {/* 2. Main High-Level Category Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <button
           onClick={() => handleTabChange("ALL")}
           className={`py-3.5 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm ${
@@ -270,6 +295,18 @@ function MenuContent() {
           <Sparkles className="w-4 h-4 text-amber-300" />
           <span>Combo Ăn + Uống</span>
         </button>
+
+        <button
+          onClick={() => handleTabChange("FAVORITES")}
+          className={`py-3.5 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm ${
+            activeTab === "FAVORITES"
+              ? "bg-rose-600 text-white shadow-md ring-2 ring-rose-400/40"
+              : "bg-white border border-rose-200 text-rose-600 hover:bg-rose-50"
+          }`}
+        >
+          <Heart className={`w-4 h-4 ${activeTab === "FAVORITES" ? "fill-current" : ""}`} />
+          <span>Yêu Thích ({favIds.length})</span>
+        </button>
       </div>
 
       {/* 3. Sub-Category Pills & Sort selector */}
@@ -314,14 +351,34 @@ function MenuContent() {
           })}
         </div>
 
-        {/* Sort selector & Pagination badge */}
-        <div className="flex items-center gap-3 self-end sm:self-auto shrink-0">
+        {/* Filter controls: Price range, Sort & Pagination badge */}
+        <div className="flex flex-wrap items-center gap-3 self-end sm:self-auto shrink-0">
           {totalItems > 0 && (
             <span className="text-[11px] font-bold text-[#6F4E37] bg-[#FAF7F2] border border-[#EFE6DC] px-2.5 py-1 rounded-xl">
-              Trang {validPage}/{totalPages}
+              Trang {validPage}/{totalPages} ({totalItems} món)
             </span>
           )}
-          <div className="flex items-center gap-2">
+
+          {/* Price Range */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-[#786C65]">Mức giá:</span>
+            <select
+              value={priceRange}
+              onChange={(e) => {
+                setPriceRange(e.target.value as any);
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-[#EFE6DC] text-xs font-semibold text-[#2D2522] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#6F4E37]"
+            >
+              <option value="ALL">Tất cả mức giá</option>
+              <option value="UNDER_35">Dưới 35.000đ</option>
+              <option value="35_TO_50">35.000đ - 50.000đ</option>
+              <option value="OVER_50">Trên 50.000đ</option>
+            </select>
+          </div>
+
+          {/* Sort Selector */}
+          <div className="flex items-center gap-1.5">
             <SlidersHorizontal className="w-4 h-4 text-[#786C65]" />
             <span className="text-xs font-semibold text-[#786C65]">Sắp xếp:</span>
             <select
@@ -330,7 +387,7 @@ function MenuContent() {
                 setSortBy(e.target.value);
                 setCurrentPage(1);
               }}
-              className="bg-white border border-[#EFE6DC] text-xs font-semibold text-[#2D2522] rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#6F4E37]"
+              className="bg-white border border-[#EFE6DC] text-xs font-semibold text-[#2D2522] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#6F4E37]"
             >
               <option value="default">Nổi bật nhất</option>
               <option value="price_asc">Giá tăng dần</option>
@@ -441,6 +498,24 @@ function MenuContent() {
                         </span>
                       )}
                     </div>
+
+                    {/* Favorite Heart Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleToggleFav(id);
+                      }}
+                      className={`absolute bottom-2.5 right-2.5 p-1.5 rounded-full shadow-md transition-all z-10 ${
+                        favIds.includes(id)
+                          ? "bg-rose-500 text-white scale-110"
+                          : "bg-white/90 backdrop-blur-sm text-[#786C65] hover:text-rose-500 hover:scale-105"
+                      }`}
+                      title={favIds.includes(id) ? "Bỏ yêu thích" : "Yêu thích món này"}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${favIds.includes(id) ? "fill-current" : ""}`} />
+                    </button>
                   </div>
 
                   {/* Category name & Product Title */}

@@ -4,8 +4,10 @@ export const dynamic = "force-dynamic";
 
 import React, { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { OrderResponse } from "@/types";
+import { useCart } from "@/context/CartContext";
 import { getDistinctOrderItemImage } from "@/lib/orderImageHelper";
 import {
   Clock,
@@ -20,6 +22,7 @@ import {
   User,
   Copy,
   QrCode,
+  RotateCcw,
 } from "lucide-react";
 
 export default function OrderDetailPage({
@@ -28,11 +31,47 @@ export default function OrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const resolvedParams = use(params);
+  const router = useRouter();
+  const { addItem } = useCart();
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [notifiedTransfer, setNotifiedTransfer] = useState(false);
+
+  const handleReorder = () => {
+    if (!order || !order.items || order.items.length === 0) return;
+    let addedCount = 0;
+    for (const item of order.items) {
+      const ok = addItem({
+        productId: item.productId,
+        name: item.productName,
+        imageUrl: item.imageUrl,
+        itemType: (item.itemType as any) || "DRINK",
+        size: item.size || "M",
+        sugarLevel: item.sugarLevel,
+        iceLevel: item.iceLevel,
+        spicyLevel: item.spicyLevel,
+        dippingSauce: item.dippingSauce,
+        portionSize: item.portionSize,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        totalPrice: item.totalPrice,
+        isCustomDIY: item.isCustomDIY,
+        customNotes: item.customNotes,
+        toppings: (item.toppings || []).map((t) => ({
+          toppingId: t.toppingId || 0,
+          name: t.toppingName,
+          price: t.price,
+          quantity: t.quantity,
+        })),
+      });
+      if (ok) addedCount++;
+    }
+    if (addedCount > 0) {
+      router.push("/cart");
+    }
+  };
 
   // Timer tick for 2-minute countdown
   const [currentTime, setCurrentTime] = useState(Date.now());
@@ -223,6 +262,16 @@ export default function OrderDetailPage({
               </button>
             </div>
           )}
+
+          {/* Re-order button */}
+          <button
+            onClick={handleReorder}
+            className="px-4 py-2 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] transition-colors shadow-sm flex items-center gap-1.5"
+            title="Thêm lại tất cả món trong đơn này vào giỏ hàng"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Đặt Lại Đơn Này</span>
+          </button>
 
           {/* Chat with Manager button */}
           <button

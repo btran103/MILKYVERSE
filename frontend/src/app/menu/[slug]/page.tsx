@@ -29,7 +29,9 @@ import {
   Award,
   Coffee,
   CheckCircle2,
+  Heart,
 } from "lucide-react";
+import { getFavoriteIds, toggleFavorite, subscribeFavorites } from "@/lib/favorites";
 
 export default function ProductDetailPage({
   params,
@@ -67,6 +69,22 @@ export default function ProductDetailPage({
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccess, setReviewSuccess] = useState<boolean>(false);
+  const [isFav, setIsFav] = useState(false);
+
+  const prodIdForFav = product ? (product.Id ?? product.id) : 0;
+  useEffect(() => {
+    if (prodIdForFav) {
+      const favs = getFavoriteIds();
+      setIsFav(favs.includes(prodIdForFav));
+      return subscribeFavorites((ids) => setIsFav(ids.includes(prodIdForFav)));
+    }
+  }, [prodIdForFav]);
+
+  const handleToggleFav = () => {
+    if (prodIdForFav) {
+      toggleFavorite(prodIdForFav);
+    }
+  };
 
   useEffect(() => {
     async function loadDetail() {
@@ -365,9 +383,24 @@ export default function ProductDetailPage({
               <span className="text-xs text-[#786C65]">({reviews.length} đánh giá tại món)</span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-black text-[#2D2522] leading-tight">
-              {pName}
-            </h1>
+            <div className="flex items-start justify-between gap-4">
+              <h1 className="text-2xl sm:text-3xl font-black text-[#2D2522] leading-tight">
+                {pName}
+              </h1>
+              <button
+                type="button"
+                onClick={handleToggleFav}
+                className={`px-3 py-2 rounded-2xl border transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold shrink-0 ${
+                  isFav
+                    ? "bg-rose-50 border-rose-200 text-rose-600"
+                    : "bg-white border-[#EFE6DC] text-[#786C65] hover:text-rose-600 hover:border-rose-200"
+                }`}
+                title={isFav ? "Bỏ yêu thích" : "Lưu vào danh sách yêu thích"}
+              >
+                <Heart className={`w-4 h-4 ${isFav ? "fill-rose-500 text-rose-500" : ""}`} />
+                <span>{isFav ? "Đã Thích" : "Yêu Thích"}</span>
+              </button>
+            </div>
             <p className="text-sm text-[#786C65] mt-2 leading-relaxed">
               {pDesc}
             </p>

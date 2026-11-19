@@ -3,6 +3,18 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
+import { api } from "@/lib/api";
+import { Product } from "@/types";
+import { getLoyaltyOverview, TIERS } from "@/lib/loyalty";
+import {
+  getSavedAddresses,
+  saveAddress,
+  deleteAddress,
+  setDefaultAddress,
+  SavedAddress,
+} from "@/lib/addresses";
+import { getFavoriteIds, toggleFavorite, subscribeFavorites } from "@/lib/favorites";
 import {
   User as UserIcon,
   Phone,
@@ -13,10 +25,19 @@ import {
   CheckCircle,
   AlertCircle,
   Sparkles,
-  Camera,
   ArrowLeft,
   Shield,
-  Smile,
+  Crown,
+  Award,
+  Plus,
+  Trash2,
+  Home,
+  Building2,
+  GraduationCap,
+  Heart,
+  ShoppingBag,
+  ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,7 +55,9 @@ const PRESET_AVATARS = [
 export default function ProfilePage() {
   const router = useRouter();
   const { user, updateProfile, isLoading } = useAuth();
+  const { addItem } = useCart();
 
+  // Basic Profile Form State
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [address, setAddress] = useState("");
@@ -45,6 +68,27 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
 
+  // Loyalty Points & Tier
+  const [loyalty, setLoyalty] = useState<{
+    points: number;
+    currentTier: typeof TIERS.BRONZE;
+    progress: number;
+    pointsToNext: number;
+  } | null>(null);
+
+  // Multiple Addresses
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [showAddAddressModal, setShowAddAddressModal] = useState(false);
+  const [newLabel, setNewLabel] = useState<"Nhà riêng" | "Văn phòng" | "Trường học" | "Khác">("Nhà riêng");
+  const [newRecipientName, setNewRecipientName] = useState("");
+  const [newRecipientPhone, setNewRecipientPhone] = useState("");
+  const [newAddressDetail, setNewAddressDetail] = useState("");
+  const [newIsDefault, setNewIsDefault] = useState(false);
+
+  // Favorites
+  const [favProducts, setFavProducts] = useState<Product[]>([]);
+  const [loadingFavs, setLoadingFavs] = useState(false);
+
   useEffect(() => {
     if (!isLoading && !user) {
       router.push("/auth/login?redirect=/profile");
@@ -53,8 +97,40 @@ export default function ProfilePage() {
       setPhoneNumber(user.phoneNumber || "");
       setAddress(user.address || "");
       setAvatarUrl(user.avatarUrl || "");
+
+      // Load Loyalty Data
+      const loy = getLoyaltyOverview(user.id);
+      setLoyalty(loy);
+
+      // Load Saved Addresses
+      const addrs = getSavedAddresses(user.id, user.address, user.fullName, user.phoneNumber);
+      setAddresses(addrs);
     }
   }, [user, isLoading, router]);
+
+  // Load Favorite Products
+  const loadFavorites = async () => {
+    const ids = getFavoriteIds();
+    if (ids.length === 0) {
+      setFavProducts([]);
+      return;
+    }
+    setLoadingFavs(true);
+    try {
+      const allProds = await api.getProducts();
+      const filtered = allProds.filter((p) => ids.includes(p.Id ?? p.id));
+      setFavProducts(filtered);
+    } catch (e) {
+      console.error("Lỗi khi tải món yêu thích:", e);
+    } finally {
+      setLoadingFavs(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFavorites();
+    return subscribeFavorites(() => loadFavorites());
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +160,70 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAddNewAddress = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newAddressDetail.trim()) return;
+
+    const updated = saveAddress(user.id, {
+      label: newLabel,
+      recipientName: newRecipientName.trim() || user.fullName || "Khách Hàng",
+      phoneNumber: newRecipientPhone.trim() || user.phoneNumber || "0908888777",
+      addressDetail: newAddressDetail.trim(),
+      isDefault: newIsDefault,
+    });
+
+    setAddresses(updated);
+    setShowAddAddressModal(false);
+    setNewAddressDetail("");
+    setNewIsDefault(false);
+  };
+
+  const handleDeleteAddress = (id: string) => {
+    if (!user) return;
+    const updated = deleteAddress(user.id, id);
+    setAddresses(updated);
+  };
+
+  const handleSetDefaultAddress = (id: string) => {
+    if (!user) return;
+    const updated = setDefaultAddress(user.id, id);
+    setAddresses(updated);
+    const chosen = updated.find((a) => a.id === id);
+    if (chosen) {
+      setAddress(chosen.addressDetail);
+    }
+  };
+
+  const handleQuickAddFav = (product: Product) => {
+    const id = product.Id ?? product.id;
+    const name = product.Name ?? product.name;
+    const price = product.BasePrice ?? product.basePrice;
+    const img = product.ImageUrl ?? product.imageUrl;
+    const type = product.ProductType ?? product.productType ?? "DRINK";
+
+    const ok = addItem({
+      productId: id,
+      name: name,
+      imageUrl: img,
+      itemType: type,
+      size: type === "DRINK" ? "M" : "Standard",
+      sugarLevel: type === "DRINK" ? "50%" : undefined,
+      iceLevel: type === "DRINK" ? "70%" : undefined,
+      spicyLevel: type === "FOOD" ? (product.spicyLevel ? `Cấp ${product.spicyLevel}` : "Không cay") : undefined,
+      dippingSauce: product.defaultSauce || (type === "FOOD" ? "Tương ớt" : undefined),
+      portionSize: product.portionDescription || "Phần tiêu chuẩn",
+      unitPrice: price,
+      quantity: 1,
+      totalPrice: price,
+      isCustomDIY: false,
+      toppings: [],
+    });
+
+    if (ok) {
+      router.push("/cart");
+    }
+  };
+
   if (isLoading || !user) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-20 text-center">
@@ -93,17 +233,19 @@ export default function ProfilePage() {
     );
   }
 
+  const currentTier = loyalty?.currentTier || TIERS.BRONZE;
+
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
       {/* 1. Header Navigation */}
       <div className="flex items-center justify-between pb-4 border-b border-[#EFE6DC]">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-[#6F4E37] uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Tài Khoản Khách Hàng</span>
+            <span>Trung Tâm Khách Hàng MilkyVerse</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-[#2D2522] mt-1">
-            Hồ Sơ Cá Nhân & Avatar Đại Diện
+            Hồ Sơ, Thẻ Hội Viên & Sổ Địa Chỉ
           </h1>
         </div>
         <Link
@@ -128,6 +270,383 @@ export default function ProfilePage() {
         </div>
       )}
 
+      {/* 2. MILKYVERSE VIP MEMBERSHIP CARD */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Crown className="w-5 h-5 text-amber-500" />
+            <h2 className="text-lg font-black text-[#2D2522]">Thẻ Hội Viên Milky Galaxy VIP</h2>
+          </div>
+          <span className="text-xs font-bold text-[#6F4E37] bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+            10.000đ = 1 Điểm Thưởng
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Virtual VIP Card */}
+          <div className="lg:col-span-6 relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-[#2D2522] via-[#4A3324] to-[#6F4E37] text-white shadow-xl border border-amber-400/30 flex flex-col justify-between min-h-[220px]">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-[10px] uppercase font-bold tracking-widest text-amber-300/90">
+                  MILKYVERSE LOYALTY CLUB
+                </p>
+                <h3 className="text-xl sm:text-2xl font-black mt-1 text-white">
+                  {currentTier.name}
+                </h3>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-amber-300">
+                <Crown className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="space-y-2 my-4">
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="font-semibold text-white/80">Điểm tích lũy hiện có:</span>
+                <span className="text-2xl font-black text-amber-300">
+                  {loyalty?.points || 0} <span className="text-xs text-white/90">điểm</span>
+                </span>
+              </div>
+              <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-amber-400 h-full rounded-full transition-all duration-700"
+                  style={{ width: `${loyalty?.progress || 0}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-white/70 text-right">
+                {currentTier.nextTierPoints
+                  ? `Còn ${loyalty?.pointsToNext || 0} điểm nữa để thăng hạng ${
+                      currentTier.tier === "BRONZE"
+                        ? "Bạc"
+                        : currentTier.tier === "SILVER"
+                        ? "Vàng"
+                        : "Kim Cương"
+                    }`
+                  : "Bạn đã đạt danh hiệu Hội viên Kim Cương cao cấp nhất!"}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between text-xs pt-2 border-t border-white/15">
+              <span className="font-mono tracking-wider text-white/80">
+                MV-VIP-{(user.id * 8831).toString().padStart(8, "0")}
+              </span>
+              <span className="font-bold text-white/90">{user.fullName || "Khách Hàng VIP"}</span>
+            </div>
+          </div>
+
+          {/* Tier Benefits */}
+          <div className="lg:col-span-6 bg-white p-6 rounded-3xl border border-[#EFE6DC] shadow-sm flex flex-col justify-between space-y-4">
+            <div>
+              <div className="flex items-center gap-2 pb-3 border-b border-[#FAF7F2]">
+                <Award className="w-4 h-4 text-[#6F4E37]" />
+                <h3 className="text-sm font-black text-[#2D2522]">
+                  Đặc Quyền Của Bạn ({currentTier.name})
+                </h3>
+              </div>
+              <ul className="space-y-2.5 pt-3">
+                {currentTier.benefits.map((b, idx) => (
+                  <li key={idx} className="flex items-start gap-2 text-xs text-[#2D2522]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#6F4E37] mt-1.5 shrink-0" />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200/80 text-[11px] text-amber-900 leading-relaxed">
+              💡 <strong>Mẹo dùng điểm:</strong> Bạn có thể dùng điểm tích lũy để trừ tiền trực tiếp tại bước <strong>Thanh Toán (Checkout)</strong>. Cứ 1 điểm = 1.000đ giảm giá!
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. SỔ ĐỊA CHỈ NHẬN HÀNG (MULTIPLE ADDRESSES) */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#EFE6DC] shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#FAF7F2]">
+          <div>
+            <h2 className="text-base font-bold text-[#2D2522] flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-[#6F4E37]" />
+              <span>Sổ Địa Chỉ Giao Hàng ({addresses.length})</span>
+            </h2>
+            <p className="text-xs text-[#786C65] mt-0.5">
+              Lưu sẵn nhiều địa chỉ (Nhà riêng, Văn phòng, Trường học) để chọn nhanh khi đặt hàng
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setNewRecipientName(user.fullName || "");
+              setNewRecipientPhone(user.phoneNumber || "");
+              setShowAddAddressModal(true);
+            }}
+            className="px-4 py-2 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Thêm Địa Chỉ Mới</span>
+          </button>
+        </div>
+
+        {addresses.length === 0 ? (
+          <div className="text-center py-6 text-xs text-[#786C65]">
+            Chưa có địa chỉ nào được lưu. Bấm &quot;Thêm Địa Chỉ Mới&quot; để tạo ngay.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {addresses.map((a) => (
+              <div
+                key={a.id}
+                className={`p-4 rounded-2xl border transition-all space-y-3 flex flex-col justify-between ${
+                  a.isDefault
+                    ? "border-[#6F4E37] bg-[#FAF7F2]/60 shadow-sm"
+                    : "border-[#EFE6DC] hover:border-[#6F4E37]/40"
+                }`}
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white border border-[#EFE6DC] text-[11px] font-bold text-[#6F4E37]">
+                      {a.label === "Nhà riêng" ? (
+                        <Home className="w-3 h-3" />
+                      ) : a.label === "Văn phòng" ? (
+                        <Building2 className="w-3 h-3" />
+                      ) : a.label === "Trường học" ? (
+                        <GraduationCap className="w-3 h-3" />
+                      ) : (
+                        <MapPin className="w-3 h-3" />
+                      )}
+                      <span>{a.label}</span>
+                    </span>
+
+                    {a.isDefault && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        Mặc Định
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs font-bold text-[#2D2522]">
+                    {a.recipientName} <span className="font-normal text-[#786C65]">({a.phoneNumber})</span>
+                  </p>
+                  <p className="text-xs text-[#2D2522] leading-relaxed">{a.addressDetail}</p>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-[#EFE6DC]/60 text-xs">
+                  {!a.isDefault ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSetDefaultAddress(a.id)}
+                      className="text-[11px] font-bold text-[#6F4E37] hover:underline"
+                    >
+                      Đặt làm mặc định
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-[#786C65]">Đang dùng khi checkout</span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAddress(a.id)}
+                    className="text-red-500 hover:text-red-700 p-1"
+                    title="Xóa địa chỉ"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal Thêm Địa Chỉ Mới */}
+      {showAddAddressModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4 animate-scale">
+            <h3 className="text-lg font-black text-[#2D2522] flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-[#6F4E37]" />
+              <span>Thêm Địa Chỉ Nhận Hàng</span>
+            </h3>
+
+            <form onSubmit={handleAddNewAddress} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-[#2D2522] block mb-1">Loại địa chỉ</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(["Nhà riêng", "Văn phòng", "Trường học", "Khác"] as const).map((lbl) => (
+                    <button
+                      key={lbl}
+                      type="button"
+                      onClick={() => setNewLabel(lbl)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                        newLabel === lbl
+                          ? "bg-[#6F4E37] text-white border-[#6F4E37]"
+                          : "bg-[#FAF7F2] border-[#EFE6DC] text-[#2D2522] hover:bg-white"
+                      }`}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#2D2522] block mb-1">Tên người nhận</label>
+                <input
+                  type="text"
+                  required
+                  value={newRecipientName}
+                  onChange={(e) => setNewRecipientName(e.target.value)}
+                  placeholder="Họ tên người nhận"
+                  className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#2D2522] block mb-1">Số điện thoại</label>
+                <input
+                  type="tel"
+                  required
+                  value={newRecipientPhone}
+                  onChange={(e) => setNewRecipientPhone(e.target.value)}
+                  placeholder="0901234567"
+                  className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#2D2522] block mb-1">Địa chỉ chi tiết</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={newAddressDetail}
+                  onChange={(e) => setNewAddressDetail(e.target.value)}
+                  placeholder="Số nhà, tên tòa nhà, tên đường, phường, quận..."
+                  className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-[#2D2522]">
+                <input
+                  type="checkbox"
+                  checked={newIsDefault}
+                  onChange={(e) => setNewIsDefault(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#6F4E37] focus:ring-[#6F4E37]"
+                />
+                <span>Đặt làm địa chỉ nhận hàng mặc định</span>
+              </label>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAddressModal(false)}
+                  className="px-4 py-2 rounded-xl border border-[#EFE6DC] text-xs font-bold text-[#786C65] hover:bg-[#FAF7F2]"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] shadow-sm"
+                >
+                  Lưu Địa Chỉ
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. MÓN ĂN YÊU THÍCH (FAVORITES) */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-[#EFE6DC] shadow-sm space-y-6">
+        <div className="flex items-center justify-between pb-4 border-b border-[#FAF7F2]">
+          <div>
+            <h2 className="text-base font-bold text-[#2D2522] flex items-center gap-2">
+              <Heart className="w-4 h-4 text-rose-500 fill-current" />
+              <span>Danh Sách Món Yêu Thích Của Tôi ({favProducts.length})</span>
+            </h2>
+            <p className="text-xs text-[#786C65] mt-0.5">
+              Những thức uống & món ăn vặt bạn đã thả tim để đặt lại nhanh chóng
+            </p>
+          </div>
+          <Link
+            href="/menu?type=FAVORITES"
+            className="text-xs font-bold text-[#6F4E37] hover:underline flex items-center gap-1"
+          >
+            <span>Xem trên thực đơn</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {loadingFavs ? (
+          <div className="text-center py-6 text-xs text-[#786C65]">Đang tải món yêu thích...</div>
+        ) : favProducts.length === 0 ? (
+          <div className="text-center py-8 space-y-2">
+            <Heart className="w-8 h-8 text-[#EFE6DC] mx-auto" />
+            <p className="text-xs text-[#786C65]">Bạn chưa thả tim món nào trong thực đơn.</p>
+            <Link
+              href="/menu"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#6F4E37] hover:underline pt-1"
+            >
+              <span>Khám phá menu ngay</span>
+              <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {favProducts.map((p) => {
+              const id = p.Id ?? p.id;
+              const name = p.Name ?? p.name;
+              const price = p.BasePrice ?? p.basePrice;
+              const img = p.ImageUrl ?? p.imageUrl;
+              const slug = p.Slug ?? p.slug;
+
+              return (
+                <div
+                  key={id}
+                  className="flex items-center justify-between p-3.5 rounded-2xl border border-[#EFE6DC] hover:border-[#6F4E37]/30 transition-all bg-[#FAF7F2]/40"
+                >
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
+                    <img
+                      src={img}
+                      alt={name}
+                      className="w-12 h-12 rounded-xl object-cover shrink-0 border border-[#EFE6DC]"
+                    />
+                    <div className="min-w-0">
+                      <Link
+                        href={`/menu/${slug}`}
+                        className="text-xs font-bold text-[#2D2522] truncate block hover:text-[#6F4E37]"
+                        title={name}
+                      >
+                        {name}
+                      </Link>
+                      <span className="text-[11px] font-black text-[#6F4E37]">
+                        {price.toLocaleString("vi-VN")}đ
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAddFav(p)}
+                      className="p-2 rounded-xl bg-[#6F4E37] text-white hover:bg-[#4A3324] shadow-sm transition-colors"
+                      title="Thêm vào giỏ & Đặt ngay"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(id)}
+                      className="p-2 rounded-xl bg-white border border-rose-200 text-rose-500 hover:bg-rose-50 transition-colors"
+                      title="Bỏ yêu thích"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 5. CẬP NHẬT HỒ SƠ & MẬT KHẨU */}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-8">
         {/* Left Column: Avatar Selector */}
         <div className="md:col-span-4 space-y-6">

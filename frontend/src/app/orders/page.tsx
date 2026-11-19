@@ -2,9 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { OrderResponse } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
 import { getDistinctOrderItemImage } from "@/lib/orderImageHelper";
 import {
   Package,
@@ -21,14 +23,51 @@ import {
   Sparkles,
   HelpCircle,
   LogIn,
+  RotateCcw,
 } from "lucide-react";
 
 export default function OrdersListPage() {
+  const router = useRouter();
   const { user, isLoading } = useAuth();
+  const { addItem } = useCart();
   const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"ALL" | "PROCESSING" | "COMPLETED" | "CANCELLED">("ALL");
+
+  const handleReorder = (order: OrderResponse) => {
+    if (!order.items || order.items.length === 0) return;
+    let addedCount = 0;
+    for (const item of order.items) {
+      const ok = addItem({
+        productId: item.productId,
+        name: item.productName,
+        imageUrl: item.imageUrl,
+        itemType: (item.itemType as any) || "DRINK",
+        size: item.size || "M",
+        sugarLevel: item.sugarLevel,
+        iceLevel: item.iceLevel,
+        spicyLevel: item.spicyLevel,
+        dippingSauce: item.dippingSauce,
+        portionSize: item.portionSize,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        totalPrice: item.totalPrice,
+        isCustomDIY: item.isCustomDIY,
+        customNotes: item.customNotes,
+        toppings: (item.toppings || []).map((t) => ({
+          toppingId: t.toppingId || 0,
+          name: t.toppingName,
+          price: t.price,
+          quantity: t.quantity,
+        })),
+      });
+      if (ok) addedCount++;
+    }
+    if (addedCount > 0) {
+      router.push("/cart");
+    }
+  };
 
   // Timer tick for 2-minute countdown
   const [currentTime, setCurrentTime] = useState(Date.now());
@@ -471,6 +510,16 @@ export default function OrdersListPage() {
                         <span>Hủy Đơn Hàng</span>
                       </button>
                     )}
+
+                    {/* Re-order button */}
+                    <button
+                      onClick={() => handleReorder(o)}
+                      className="px-3.5 py-1.5 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] transition-colors flex items-center gap-1.5 shadow-sm"
+                      title="Thêm lại tất cả món trong đơn này vào giỏ hàng"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Đặt Lại Đơn Này</span>
+                    </button>
 
                     {/* Chat with Manager button (always available, especially helpful if cancelled) */}
                     <button

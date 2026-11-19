@@ -22,7 +22,14 @@ import {
   ShieldCheck,
   Ticket,
   RefreshCw,
+  Crown,
+  Home,
+  Building2,
+  GraduationCap,
+  MapPin,
 } from "lucide-react";
+import { getSavedAddresses, SavedAddress } from "@/lib/addresses";
+import { getLoyaltyOverview, saveLoyaltyPoints } from "@/lib/loyalty";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -37,6 +44,12 @@ export default function CheckoutPage() {
   const [promoCode, setPromoCode] = useState<string>("");
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [promoMsg, setPromoMsg] = useState<{ text: string; error?: boolean } | null>(null);
+
+  // Saved Addresses & Loyalty
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddrId, setSelectedAddrId] = useState<string | null>(null);
+  const [loyaltyPoints, setLoyaltyPoints] = useState<number>(0);
+  const [usePoints, setUsePoints] = useState<boolean>(false);
 
   const [timeLeft, setTimeLeft] = useState(120); // 2 minutes transfer timer
   const [loading, setLoading] = useState(false);
@@ -75,9 +88,24 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (!name) setName(user.fullName || "");
-    if (!phone) setPhone(user.phoneNumber || "");
-    if (!address) setAddress(user.address || "");
+    // Load saved addresses and populate default
+    const addrs = getSavedAddresses(user.id, user.address, user.fullName, user.phoneNumber);
+    setSavedAddresses(addrs);
+    const def = addrs.find((a) => a.isDefault) || addrs[0];
+    if (def) {
+      setSelectedAddrId(def.id);
+      setName(def.recipientName);
+      setPhone(def.phoneNumber);
+      setAddress(def.addressDetail);
+    } else {
+      if (!name) setName(user.fullName || "");
+      if (!phone) setPhone(user.phoneNumber || "");
+      if (!address) setAddress(user.address || "");
+    }
+
+    // Load loyalty points
+    const loy = getLoyaltyOverview(user.id);
+    setLoyaltyPoints(loy.points);
 
     const savedPromo = sessionStorage.getItem("milky_promo_code");
     if (savedPromo) {
@@ -130,8 +158,10 @@ export default function CheckoutPage() {
     );
   }
 
-  const shippingFee = subtotal >= 200000 || discountAmount >= subtotal ? 0 : 15000;
-  const finalTotal = Math.max(0, subtotal - discountAmount + shippingFee);
+  const maxPointsCanUse = Math.min(loyaltyPoints, Math.floor(Math.max(0, subtotal - discountAmount) / 1000));
+  const pointsDiscount = usePoints ? maxPointsCanUse * 1000 : 0;
+  const shippingFee = subtotal >= 200000 || (discountAmount + pointsDiscount) >= subtotal ? 0 : 15000;
+  const finalTotal = Math.max(0, subtotal - discountAmount - pointsDiscount + shippingFee);
 
   const formatTimer = (secs: number) => {
     const m = Math.floor(secs / 60);
@@ -188,6 +218,13 @@ export default function CheckoutPage() {
       };
 
       const orderRes = await api.createOrder(orderPayload);
+
+      // Deduct used loyalty points & add new earned points (1 pt per 10k subtotal)
+      if (user) {
+        const ptsUsed = usePoints ? maxPointsCanUse : 0;
+        const ptsEarned = Math.floor(subtotal / 10000);
+        saveLoyaltyPoints(user.id, Math.max(0, loyaltyPoints - ptsUsed + ptsEarned));
+      }
 
       // Celebrate with confetti!
       confetti({
@@ -276,6 +313,48 @@ export default function CheckoutPage() {
               <Truck className="w-4 h-4 text-[#6F4E37]" />
               <span>1. Thông Tin Nhận Hàng</span>
             </h3>
+
+            {/* Quick Saved Address Pills */}
+            {savedAddresses.length > 0 && (
+              <div className="space-y-1.5 pb-2 border-b border-[#FAF7F2]">
+                <label className="font-bold text-[#786C65] text-[11px] block">
+                  Chọn nhanh từ Sổ địa chỉ của bạn:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {savedAddresses.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAddrId(a.id);
+                        setName(a.recipientName);
+                        setPhone(a.phoneNumber);
+                        setAddress(a.addressDetail);
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all ${
+                        selectedAddrId === a.id
+                          ? "border-[#6F4E37] bg-[#FAF7F2] ring-1 ring-[#6F4E37]"
+                          : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[11px] font-bold">
+                        <span className="flex items-center gap-1 text-[#6F4E37]">
+                          {a.label === "Nhà riêng" ? <Home className="w-3 h-3" /> : a.label === "Văn phòng" ? <Building2 className="w-3 h-3" /> : <MapPin className="w-3 h-3" />}
+                          {a.label}
+                        </span>
+                        {a.isDefault && (
+                          <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded-full">
+                            Mặc định
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-bold text-[#2D2522] mt-0.5 truncate">{a.recipientName} • {a.phoneNumber}</p>
+                      <p className="text-[10px] text-[#786C65] truncate">{a.addressDetail}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 text-xs">
               <div>
@@ -552,6 +631,38 @@ export default function CheckoutPage() {
               )}
             </div>
 
+            {/* Loyalty Points Redemption block */}
+            {loyaltyPoints > 0 && maxPointsCanUse > 0 && (
+              <div className="pt-2 border-t border-[#EFE6DC] space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[#786C65] flex items-center gap-1.5">
+                    <Crown className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Điểm Thưởng Hội Viên</span>
+                  </label>
+                  <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                    Có {loyaltyPoints} điểm
+                  </span>
+                </div>
+
+                <label className="flex items-center justify-between p-3 rounded-xl border border-amber-200 bg-amber-50/60 cursor-pointer hover:bg-amber-100/50 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={usePoints}
+                      onChange={(e) => setUsePoints(e.target.checked)}
+                      className="w-4 h-4 rounded text-[#6F4E37] focus:ring-[#6F4E37]"
+                    />
+                    <span className="text-xs font-bold text-[#2D2522]">
+                      Dùng {maxPointsCanUse} điểm giảm giá
+                    </span>
+                  </div>
+                  <span className="text-xs font-black text-emerald-700">
+                    -{(maxPointsCanUse * 1000).toLocaleString("vi-VN")}đ
+                  </span>
+                </label>
+              </div>
+            )}
+
             <div className="space-y-2 text-xs text-[#786C65] pt-2 border-t border-[#EFE6DC]">
               <div className="flex justify-between">
                 <span>Tạm tính:</span>
@@ -561,6 +672,12 @@ export default function CheckoutPage() {
                 <div className="flex justify-between text-[#4E7D55] font-semibold">
                   <span>Mã ưu đãi ({promoCode}):</span>
                   <span>-{discountAmount.toLocaleString("vi-VN")}đ</span>
+                </div>
+              )}
+              {pointsDiscount > 0 && (
+                <div className="flex justify-between text-amber-700 font-semibold">
+                  <span>Điểm thưởng ({maxPointsCanUse} điểm):</span>
+                  <span>-{pointsDiscount.toLocaleString("vi-VN")}đ</span>
                 </div>
               )}
               <div className="flex justify-between">
