@@ -563,6 +563,8 @@ public class SuggestedDrinkDto
     public string IceRecommend { get; set; } = "70%";
     public List<string> RecommendedToppings { get; set; } = new();
     public string Reason { get; set; } = string.Empty;
+    public string? Slug { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 public class AIChatRequest

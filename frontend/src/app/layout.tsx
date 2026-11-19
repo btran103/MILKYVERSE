@@ -6,6 +6,7 @@ import { CartProvider } from "@/context/CartContext";
 import { AnnouncementMarquee } from "@/components/layout/AnnouncementMarquee";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { AIBaristaWidget } from "@/components/layout/AIBaristaWidget";
 
 export const metadata: Metadata = {
   title: "MILKYVERSE — Vũ Trụ Trà Sữa & Đồ Ăn Vặt Tích Hợp AI",
@@ -41,6 +42,7 @@ export default function RootLayout({
             <AnnouncementMarquee />
             <main className="flex-1">{children}</main>
             <Footer />
+            <AIBaristaWidget />
           </CartProvider>
         </AuthProvider>
       </body>

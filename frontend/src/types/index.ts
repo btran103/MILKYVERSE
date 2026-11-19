@@ -299,6 +299,8 @@ export interface SuggestedDrink {
   iceRecommend: string;
   recommendedToppings: string[];
   reason: string;
+  slug?: string;
+  imageUrl?: string;
 }
 
 export interface AIChatMessage {

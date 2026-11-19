@@ -16,6 +16,7 @@ import {
   ShipperDashboard,
   StockAudit,
   StockBatch,
+  SuggestedDrink,
   Topping,
   User,
 } from "@/types";
@@ -133,7 +134,7 @@ export const api = {
 
   // AI Barista
   sendAIChat: (message: string, sessionId?: number) =>
-    request<{ sessionId: number; reply: string; suggestedDrinks: ProductDetail["relatedProducts"]; isAiModelLive: boolean }>("/ai/chat", {
+    request<{ sessionId: number; reply: string; suggestedDrinks: SuggestedDrink[]; isAiModelLive: boolean }>("/ai/chat", {
       method: "POST",
       body: JSON.stringify({ message, sessionId }),
     }),

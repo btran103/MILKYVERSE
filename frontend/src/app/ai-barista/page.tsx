@@ -153,10 +153,13 @@ export default function AIBaristaPage() {
   };
 
   const quickPrompts = [
-    "Trà sữa ít ngọt, béo nhẹ cho người ăn kiêng",
-    "Món trà hoa quả nhiệt đới thanh mát giải khát",
-    "Trà ô long đậm vị trà, hậu ngọt sâu",
-    "Thức uống béo ngậy với lớp kem Cheese Foam",
+    "🌙 Món uống buổi tối không lo mất ngủ (không caffeine)",
+    "🥗 Đồ uống ít ngọt / ăn kiêng 0% đường",
+    "🍑 Trà trái cây mát lạnh dưới 40k",
+    "🍟 Có món ăn vặt gì nhâm nhi cùng trà sữa không?",
+    "🧪 Hướng dẫn tự pha chế tại /diy Studio",
+    "📦 Đơn hàng của mình tới đâu rồi?",
+    "🧀 Thức uống béo ngậy với lớp kem Cheese Foam",
   ];
 
   return (
