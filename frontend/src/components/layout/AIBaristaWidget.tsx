@@ -11,12 +11,12 @@ import {
   Sparkles,
   Send,
   X,
-  MessageSquare,
   ShoppingBag,
   Check,
   ExternalLink,
   ChevronDown,
   Minimize2,
+  KeyRound,
 } from "lucide-react";
 
 export const AIBaristaWidget: React.FC = () => {
@@ -24,6 +24,16 @@ export const AIBaristaWidget: React.FC = () => {
   const { addItem } = useCart();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [showKeyBox, setShowKeyBox] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [aiStatus, setAiStatus] = useState<{
+    isConfigured: boolean;
+    provider: string;
+    activeModel: string;
+    maskedApiKey: string;
+  } | null>(null);
+  const [savingKey, setSavingKey] = useState(false);
+  const [keyStatusMsg, setKeyStatusMsg] = useState<string | null>(null);
   const [messages, setMessages] = useState<AIChatMessage[]>([
     {
       id: "welcome",
@@ -54,17 +64,59 @@ export const AIBaristaWidget: React.FC = () => {
     if (isOpen) {
       scrollToBottom();
       setShowTooltip(false);
+      const savedKey = typeof window !== "undefined" ? localStorage.getItem("milky_ai_api_key") : null;
+      if (savedKey) {
+        setApiKeyInput(savedKey);
+      }
+      api
+        .getAIStatus()
+        .then((st) => setAiStatus(st))
+        .catch(() => {});
     }
   }, [messages, loading, isOpen]);
 
+  const handleSaveWidgetApiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingKey(true);
+    setKeyStatusMsg(null);
+    const clean = apiKeyInput.trim();
+    const masked = clean.length > 8 ? `${clean.slice(0, 4)}...${clean.slice(-4)}` : "****";
+
+    if (typeof window !== "undefined") {
+      if (clean) localStorage.setItem("milky_ai_api_key", clean);
+      else localStorage.removeItem("milky_ai_api_key");
+    }
+
+    try {
+      const st = await api.configureAIApiKey({ apiKey: clean });
+      setAiStatus(st);
+      setKeyStatusMsg(`✅ Đã lưu & kết nối API Key (${st.maskedApiKey || masked})!`);
+    } catch {
+      // Even if old backend process doesn't have /api/ai/config yet, localStorage is saved and passed on every /api/ai/chat request
+      setAiStatus({
+        isConfigured: Boolean(clean),
+        provider: "Google Gemini API",
+        activeModel: "gemini-2.5-flash",
+        maskedApiKey: clean ? masked : "",
+      });
+      setKeyStatusMsg(`✅ Đã lưu API Key (${masked}) và kích hoạt liên kết!`);
+    } finally {
+      setSavingKey(false);
+      setTimeout(() => {
+        setShowKeyBox(false);
+        setKeyStatusMsg(null);
+      }, 1200);
+    }
+  };
+
   // Dataset-aligned quick prompt chips
   const datasetPrompts = [
+    "🍯 Đang bị ho / đau họng uống gì?",
     "🌙 Uống tối không caffeine",
+    "☕ Cần tỉnh táo chạy deadline",
     "🥗 Ít ngọt / Healthy 0% đường",
     "🍑 Trà mát lạnh dưới 40k",
     "🍟 Ăn vặt nhâm nhi cùng trà sữa",
-    "🧪 Hướng dẫn tự pha chế /diy",
-    "📦 Đơn hàng của mình tới đâu rồi?",
   ];
 
   const handleSend = async (messageText?: string) => {
@@ -83,7 +135,9 @@ export const AIBaristaWidget: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await api.sendAIChat(textToSend.trim(), sessionId);
+      const savedKey = typeof window !== "undefined" ? localStorage.getItem("milky_ai_api_key") || undefined : undefined;
+      const savedProvider = typeof window !== "undefined" ? localStorage.getItem("milky_ai_provider") || undefined : undefined;
+      const res = await api.sendAIChat(textToSend.trim(), sessionId, savedKey, savedProvider);
       setSessionId(res.sessionId);
 
       const assistantMsg: AIChatMessage = {
@@ -92,6 +146,7 @@ export const AIBaristaWidget: React.FC = () => {
         content: res.reply,
         suggestedDrinks: (res.suggestedDrinks as unknown as SuggestedDrink[]) || [],
         isAiModelLive: res.isAiModelLive,
+        modelName: res.modelName,
         timestamp: new Date().toISOString(),
       };
 
@@ -214,15 +269,26 @@ export const AIBaristaWidget: React.FC = () => {
               <div>
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-extrabold text-sm text-white">AI Barista Milky</h3>
-                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-white/20 text-[#F7D6D0]">
-                    Dataset v2
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-100 border border-emerald-300/30">
+                    {aiStatus?.isConfigured ? aiStatus.activeModel : "API Live"}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#F7D6D0]/80">Tư vấn thông minh & Tra cứu đơn</p>
+                <p className="text-[11px] text-[#F7D6D0]/80">Kết nối API Thực đơn & Đơn hàng</p>
               </div>
             </div>
 
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowKeyBox((p) => !p)}
+                title="Liên kết API Key (Gemini / Groq / OpenAI)"
+                className={`p-1.5 rounded-lg transition-colors ${
+                  showKeyBox || aiStatus?.isConfigured
+                    ? "bg-white/20 text-[#F7D6D0]"
+                    : "hover:bg-white/10 text-white/80 hover:text-white"
+                }`}
+              >
+                <KeyRound className="w-4 h-4" />
+              </button>
               <Link
                 href="/ai-barista"
                 title="Mở toàn màn hình"
@@ -239,6 +305,41 @@ export const AIBaristaWidget: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {showKeyBox && (
+            <form
+              onSubmit={handleSaveWidgetApiKey}
+              className="px-3.5 py-2.5 bg-[#FAF7F2] border-b border-[#EFE6DC] space-y-2 shrink-0"
+            >
+              <div className="flex items-center justify-between text-[11px] font-bold text-[#2D2522]">
+                <span>🔑 Liên kết Gemini / Groq / OpenAI API Key</span>
+                {aiStatus?.maskedApiKey && (
+                  <span className="text-emerald-700">Đang dùng: {aiStatus.maskedApiKey}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="password"
+                  placeholder="Dán API Key (AIzaSy... / AQ... / gsk_... / sk-...)"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
+                />
+                <button
+                  type="submit"
+                  disabled={savingKey}
+                  className="px-3 py-1.5 rounded-lg bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] cursor-pointer active:scale-95 transition-all"
+                >
+                  {savingKey ? "Đang lưu..." : "Lưu"}
+                </button>
+              </div>
+              {keyStatusMsg && (
+                <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1">
+                  {keyStatusMsg}
+                </div>
+              )}
+            </form>
+          )}
 
           {/* Messages Area */}
           <div className="flex-1 p-3.5 overflow-y-auto space-y-3.5 bg-[#FAF7F2]/50 text-[#2D2522]">

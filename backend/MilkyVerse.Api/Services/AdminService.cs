@@ -14,6 +14,7 @@ public interface IAdminService
     Task<ApiResponse<List<UserProfileDto>>> GetUsersAsync(string? role = null);
     Task<ApiResponse<UserProfileDto>> CreateEmployeeAsync(CreateUserRequest request);
     Task<ApiResponse<UserProfileDto>> UpdateUserRoleAsync(int userId, UpdateUserRoleRequest request);
+    Task<ApiResponse<UserProfileDto>> UpdateUserDetailsAsync(int userId, UpdateUserDetailsRequest request);
 }
 
 public class AdminService : IAdminService
@@ -173,6 +174,7 @@ public class AdminService : IAdminService
                 Email = u.Email,
                 PhoneNumber = u.PhoneNumber,
                 Address = u.Address,
+                AvatarUrl = u.AvatarUrl,
                 Role = u.Role,
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt
@@ -200,6 +202,7 @@ public class AdminService : IAdminService
                 Email = u.Email,
                 PhoneNumber = u.PhoneNumber,
                 Address = u.Address,
+                AvatarUrl = u.AvatarUrl,
                 Role = u.Role,
                 IsActive = u.IsActive,
                 CreatedAt = u.CreatedAt
@@ -276,9 +279,80 @@ public class AdminService : IAdminService
             Email = user.Email,
             PhoneNumber = user.PhoneNumber,
             Address = user.Address,
+            AvatarUrl = user.AvatarUrl,
             Role = user.Role,
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt
         }, "Cập nhật phân quyền và trạng thái nhân viên thành công!");
+    }
+
+    public async Task<ApiResponse<UserProfileDto>> UpdateUserDetailsAsync(int userId, UpdateUserDetailsRequest request)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        if (user == null)
+        {
+            return ApiResponse<UserProfileDto>.Fail("Không tìm thấy tài khoản người dùng.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.FullName))
+        {
+            user.FullName = request.FullName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Email) && !request.Email.Trim().Equals(user.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            var emailExists = await _context.Users.AnyAsync(u => u.Id != userId && u.Email.ToLower() == request.Email.Trim().ToLower());
+            if (emailExists)
+            {
+                return ApiResponse<UserProfileDto>.Fail("Email này đã được sử dụng bởi tài khoản khác.");
+            }
+            user.Email = request.Email.Trim().ToLowerInvariant();
+        }
+
+        if (request.PhoneNumber != null)
+        {
+            user.PhoneNumber = request.PhoneNumber.Trim();
+        }
+
+        if (request.Address != null)
+        {
+            user.Address = request.Address.Trim();
+        }
+
+        if (request.AvatarUrl != null)
+        {
+            user.AvatarUrl = request.AvatarUrl;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Role))
+        {
+            user.Role = request.Role;
+        }
+
+        if (request.IsActive.HasValue)
+        {
+            user.IsActive = request.IsActive.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        }
+
+        user.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return ApiResponse<UserProfileDto>.Ok(new UserProfileDto
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            Address = user.Address,
+            AvatarUrl = user.AvatarUrl,
+            Role = user.Role,
+            IsActive = user.IsActive,
+            CreatedAt = user.CreatedAt
+        }, "Cập nhật thông tin khách hàng & ảnh đại diện thành công!");
     }
 }

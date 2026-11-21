@@ -20,7 +20,7 @@ public class AuthController : ControllerBase
     [HttpPost("send-otp")]
     public async Task<IActionResult> SendOtp([FromBody] SendOtpRequest request)
     {
-        var result = await _authService.SendEmailOtpAsync(request.Email);
+        var result = await _authService.SendEmailOtpAsync(request.Email, request.Purpose);
         if (!result.Success)
         {
             return BadRequest(result);
@@ -31,7 +31,9 @@ public class AuthController : ControllerBase
     [HttpPost("verify-otp")]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
     {
-        var result = await _authService.VerifyEmailOtpAsync(request.Email, request.Code);
+        // For forgot-password step 2, verify OTP validity without consuming it until ResetPassword is submitted
+        bool consumeNow = !string.Equals(request.Purpose, "forgot-password", StringComparison.OrdinalIgnoreCase);
+        var result = await _authService.VerifyEmailOtpAsync(request.Email, request.Code, consumeNow);
         if (!result.Success)
         {
             return BadRequest(result);

@@ -58,6 +58,15 @@ public class AdminController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPut("users/{userId:int}")]
+    [Authorize(Roles = "Admin,Manager")]
+    public async Task<IActionResult> UpdateUserDetails(int userId, [FromBody] UpdateUserDetailsRequest request)
+    {
+        var result = await _adminService.UpdateUserDetailsAsync(userId, request);
+        if (!result.Success) return BadRequest(result);
+        return Ok(result);
+    }
+
     // --- Inventory & Ingredients ---
     [HttpGet("ingredients")]
     public async Task<IActionResult> GetIngredients()

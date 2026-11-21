@@ -1,0 +1,52 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Đăng Nhập Tài Khoản";
+}
+
+<div class="mv-card">
+    <h1 class="mv-title">Đăng Nhập MilkyVerse</h1>
+    <p class="mv-subtitle">Chỉ tài khoản đã kích hoạt xác thực OTP qua email mới được phép đăng nhập</p>
+
+    <div id="alertError" class="mv-alert mv-alert-error"></div>
+    <div id="alertSuccess" class="mv-alert mv-alert-success"></div>
+
+    <form onsubmit="handleLogin(event)">
+        <label class="mv-label">Email đăng nhập *</label>
+        <input type="email" id="loginEmail" class="mv-input" required placeholder="ten@gmail.com" />
+
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label class="mv-label">Mật khẩu *</label>
+            <a href="/Account/ForgotPassword" style="font-size:11px;font-weight:700;color:#6F4E37;text-decoration:none;margin-bottom:6px;">Quên mật khẩu?</a>
+        </div>
+        <input type="password" id="loginPassword" class="mv-input" required placeholder="••••••••" />
+
+        <button type="submit" id="btnLogin" class="mv-btn">Đăng Nhập Hệ Thống</button>
+    </form>
+</div>
+
+<script>
+    async function handleLogin(e) {
+        e.preventDefault();
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const errEl = document.getElementById('alertError');
+        const okEl = document.getElementById('alertSuccess');
+        errEl.style.display = 'none';
+        okEl.style.display = 'none';
+
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+            errEl.innerText = json.message || 'Đăng nhập thất bại.';
+            errEl.style.display = 'block';
+            return;
+        }
+        okEl.innerText = `Đăng nhập thành công! Xin chào ${json.data.fullName} (${json.data.role}).`;
+        okEl.style.display = 'block';
+        setTimeout(() => { window.location.href = 'http://localhost:3000'; }, 1200);
+    }
+</script>

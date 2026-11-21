@@ -36,7 +36,7 @@ import {
   GraduationCap,
   Heart,
   ShoppingBag,
-  ExternalLink,
+  Camera,
   ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
@@ -67,6 +67,44 @@ export default function ProfilePage() {
 
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleUploadFromComputer = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setMsg({ text: "Vui lòng chọn tệp hình ảnh hợp lệ (.jpg, .png, .webp...).", error: true });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const size = 256;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          const minSide = Math.min(img.width, img.height);
+          const sx = (img.width - minSide) / 2;
+          const sy = (img.height - minSide) / 2;
+          ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+          const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          setAvatarUrl(compressedDataUrl);
+          setMsg({
+            text: `Đã gắn ảnh "${file.name}" từ máy tính! Bấm "Lưu Thay Đổi Hồ Sơ" bên dưới để lưu lại.`,
+            error: false,
+          });
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   // Loyalty Points & Tier
   const [loyalty, setLoyalty] = useState<{
@@ -651,12 +689,16 @@ export default function ProfilePage() {
         {/* Left Column: Avatar Selector */}
         <div className="md:col-span-4 space-y-6">
           <div className="bg-white p-6 rounded-3xl border border-[#EFE6DC] shadow-sm text-center space-y-4">
-            <div className="relative w-28 h-28 mx-auto rounded-full overflow-hidden border-4 border-[#F7D6D0] shadow-md bg-[#FAF7F2] flex items-center justify-center">
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              title="Nhấn để chọn ảnh đại diện từ máy tính"
+              className="group relative w-28 h-28 mx-auto rounded-full overflow-hidden border-4 border-[#F7D6D0] shadow-md bg-[#FAF7F2] flex items-center justify-center cursor-pointer"
+            >
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
                   alt={fullName}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                   onError={() => setAvatarUrl("")}
                 />
               ) : (
@@ -664,6 +706,31 @@ export default function ProfilePage() {
                   {fullName ? fullName.charAt(0).toUpperCase() : "M"}
                 </div>
               )}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                <Camera className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Nút ngay dưới ảnh nhấn vô thay đổi ảnh từ máy tính lên */}
+            <div className="pt-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleUploadFromComputer}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] shadow-sm transition-all active:scale-95"
+              >
+                <Camera className="w-4 h-4 text-[#F7D6D0]" />
+                <span>Thay Đổi Ảnh Từ Máy Tính</span>
+              </button>
+              <p className="text-[10px] text-[#786C65] mt-1">
+                Hỗ trợ ảnh JPG, PNG, WEBP trực tiếp từ máy tính của bạn
+              </p>
             </div>
 
             <div>
@@ -676,7 +743,7 @@ export default function ProfilePage() {
 
             <div className="pt-2 border-t border-[#FAF7F2]">
               <label className="text-xs font-bold text-[#2D2522] block mb-2 text-left">
-                Chọn Avatar Yêu Thích:
+                Hoặc Chọn Avatar Mẫu Có Sẵn:
               </label>
               <div className="grid grid-cols-4 gap-2">
                 {PRESET_AVATARS.map((url, i) => (
@@ -697,12 +764,12 @@ export default function ProfilePage() {
 
               <div className="mt-3 text-left">
                 <label className="text-[11px] text-[#786C65] font-semibold block mb-1">
-                  Hoặc dán URL ảnh đại diện tùy ý:
+                  Hoặc dán đường dẫn ảnh (URL):
                 </label>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://example.com/avatar.jpg"
-                  value={avatarUrl}
+                  value={avatarUrl.startsWith("data:") ? "" : avatarUrl}
                   onChange={(e) => setAvatarUrl(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
                 />

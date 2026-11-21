@@ -1,6 +1,11 @@
+using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Net.Mail;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using MilkyVerse.Api.Data;
@@ -11,8 +16,8 @@ namespace MilkyVerse.Api.Services;
 
 public interface IAuthService
 {
-    Task<ApiResponse<SendOtpResultDto>> SendEmailOtpAsync(string email);
-    Task<ApiResponse<bool>> VerifyEmailOtpAsync(string email, string code);
+    Task<ApiResponse<SendOtpResultDto>> SendEmailOtpAsync(string email, string? purpose = null);
+    Task<ApiResponse<bool>> VerifyEmailOtpAsync(string email, string code, bool consumeNow = true);
     Task<ApiResponse<bool>> ResetPasswordAsync(ResetPasswordRequest request);
     Task<ApiResponse<AuthResponse>> RegisterAsync(RegisterRequest request);
     Task<ApiResponse<AuthResponse>> LoginAsync(LoginRequest request);
@@ -25,6 +30,12 @@ public class AuthService : IAuthService
 {
     private readonly MilkyVerseDbContext _context;
     private readonly IConfiguration _config;
+    private readonly PasswordHasher<User> _identityHasher = new();
+
+    // Bảo mật chống brute-force OTP (tối đa 5 lần nhập sai cho mỗi mã OTP)
+    private static readonly ConcurrentDictionary<string, int> _failedAttemptsByEmail = new(StringComparer.OrdinalIgnoreCase);
+    // Đánh dấu email đã xác thực bước 2 (Verify OTP) thành công trong luồng Quên mật khẩu
+    private static readonly ConcurrentDictionary<string, (string Code, DateTime VerifiedAt)> _verifiedResetSessions = new(StringComparer.OrdinalIgnoreCase);
 
     public AuthService(MilkyVerseDbContext context, IConfiguration config)
     {
@@ -32,24 +43,77 @@ public class AuthService : IAuthService
         _config = config;
     }
 
-    public async Task<ApiResponse<SendOtpResultDto>> SendEmailOtpAsync(string email)
+    public async Task<ApiResponse<SendOtpResultDto>> SendEmailOtpAsync(string email, string? purpose = null)
     {
-        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@') || !email.Contains('.'))
         {
-            return ApiResponse<SendOtpResultDto>.Fail("Địa chỉ email không hợp lệ.");
+            return ApiResponse<SendOtpResultDto>.Fail("Địa chỉ email không hợp lệ. Vui lòng nhập đúng định dạng email (ví dụ: ten@gmail.com).");
         }
 
-        var normalizedEmail = email.Trim().ToLower();
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var cleanPurpose = (purpose ?? "general").Trim().ToLowerInvariant();
 
-        // Generate 6-digit OTP code
-        var otpCode = Random.Shared.Next(100000, 999999).ToString();
+        // 1. Kiểm tra điều kiện nghiệp vụ theo luồng Đăng ký vs Quên mật khẩu
+        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
+        if (cleanPurpose == "register" && existingUser != null && existingUser.IsEmailVerified)
+        {
+            return ApiResponse<SendOtpResultDto>.Fail("Email này đã được đăng ký và kích hoạt trên hệ thống. Vui lòng đăng nhập hoặc dùng chức năng Quên mật khẩu.");
+        }
 
-        // Expire in 10 minutes
+        if (cleanPurpose == "forgot-password" && existingUser == null)
+        {
+            return ApiResponse<SendOtpResultDto>.Fail("Email này chưa được đăng ký tài khoản trên hệ thống MilkyVerse.");
+        }
+
+        // 2. Chống spam email & giới hạn tần suất gửi lại mã (Rate Limiting)
+        int maxSendPer15Min = int.TryParse(_config["Email:MaxSendPer15Minutes"], out var m15) ? m15 : 5;
+        int resendCooldownSec = int.TryParse(_config["Email:ResendCooldownSeconds"], out var cd) ? cd : 60;
+        int expiryMinutes = int.TryParse(_config["Email:OtpExpiryMinutes"], out var exp) ? exp : 5;
+
+        var fifteenMinsAgo = DateTime.UtcNow.AddMinutes(-15);
+        var recentOtps = await _context.EmailVerifications
+            .Where(v => v.Email == normalizedEmail && v.CreatedAt >= fifteenMinsAgo)
+            .OrderByDescending(v => v.CreatedAt)
+            .ToListAsync();
+
+        if (recentOtps.Count >= maxSendPer15Min)
+        {
+            return ApiResponse<SendOtpResultDto>.Fail($"Bạn đã yêu cầu gửi OTP quá {maxSendPer15Min} lần trong 15 phút. Vui lòng đợi ít phút trước khi thử lại để tránh spam.");
+        }
+
+        var latestOtp = recentOtps.FirstOrDefault();
+        if (latestOtp != null)
+        {
+            var elapsedSec = (DateTime.UtcNow - latestOtp.CreatedAt).TotalSeconds;
+            // Cho phép khoảng đệm 45s để đồng bộ đồng hồ client-server
+            if (elapsedSec < Math.Min(45, resendCooldownSec))
+            {
+                int waitRemain = (int)Math.Ceiling(resendCooldownSec - elapsedSec);
+                return ApiResponse<SendOtpResultDto>.Fail($"Vui lòng đợi {waitRemain} giây nữa trước khi yêu cầu gửi lại mã OTP mới.");
+            }
+        }
+
+        // 3. Vô hiệu hóa toàn bộ các mã OTP cũ chưa sử dụng của email này (chỉ mã mới nhất có hiệu lực)
+        var activeOldOtps = await _context.EmailVerifications
+            .Where(v => v.Email == normalizedEmail && !v.IsUsed)
+            .ToListAsync();
+        foreach (var old in activeOldOtps)
+        {
+            old.IsUsed = true;
+        }
+
+        // Reset bộ đếm nhập sai khi cấp mã OTP mới
+        _failedAttemptsByEmail.TryRemove(normalizedEmail, out _);
+
+        // 4. Sinh mã OTP 6 chữ số ngẫu nhiên an toàn mật mã học, hiệu lực đúng 5 phút
+        var otpCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var expiresAt = DateTime.UtcNow.AddMinutes(expiryMinutes);
+
         var verification = new EmailVerification
         {
             Email = normalizedEmail,
             Code = otpCode,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+            ExpiresAt = expiresAt,
             IsUsed = false,
             CreatedAt = DateTime.UtcNow
         };
@@ -57,103 +121,187 @@ public class AuthService : IAuthService
         _context.EmailVerifications.Add(verification);
         await _context.SaveChangesAsync();
 
-        // Attempt SMTP sending if configured, otherwise log clearly to console for development
-        var smtpHost = _config["Email:SmtpHost"];
-        bool sentViaSmtp = false;
+        // 5. Gửi email thật 100% qua Gmail SMTP từ milkyverse103@gmail.com (Đã bỏ hoàn toàn chế độ giả lập OTP)
+        var smtpHost = Environment.GetEnvironmentVariable("MILKYVERSE_SMTP_HOST") ?? _config["Email:SmtpHost"] ?? "smtp.gmail.com";
+        var smtpPortStr = Environment.GetEnvironmentVariable("MILKYVERSE_SMTP_PORT") ?? _config["Email:SmtpPort"] ?? "587";
+        var smtpUser = Environment.GetEnvironmentVariable("MILKYVERSE_SMTP_EMAIL")
+                       ?? Environment.GetEnvironmentVariable("MILKYVERSE_SMTP_USERNAME")
+                       ?? (!string.IsNullOrWhiteSpace(_config["Email:Username"]) ? _config["Email:Username"] : "milkyverse103@gmail.com");
+        var smtpPass = Environment.GetEnvironmentVariable("MILKYVERSE_SMTP_APP_PASSWORD")
+                       ?? Environment.GetEnvironmentVariable("MILKYVERSE_SMTP_PASSWORD")
+                       ?? _config["Email:Password"];
+        var fromEmail = Environment.GetEnvironmentVariable("MILKYVERSE_SMTP_FROM")
+                        ?? (!string.IsNullOrWhiteSpace(_config["Email:FromEmail"]) ? _config["Email:FromEmail"] : smtpUser)
+                        ?? "milkyverse103@gmail.com";
+        var fromName = _config["Email:FromName"] ?? "MILKYVERSE Tea & Food";
 
-        if (!string.IsNullOrWhiteSpace(smtpHost) && !string.IsNullOrWhiteSpace(_config["Email:Username"]))
+        if (string.IsNullOrWhiteSpace(smtpPass))
         {
-            try
-            {
-                using var client = new System.Net.Mail.SmtpClient(smtpHost)
-                {
-                    Port = int.Parse(_config["Email:SmtpPort"] ?? "587"),
-                    Credentials = new System.Net.NetworkCredential(
-                        _config["Email:Username"],
-                        _config["Email:Password"]
-                    ),
-                    EnableSsl = true
-                };
-
-                var mail = new System.Net.Mail.MailMessage
-                {
-                    From = new System.Net.Mail.MailAddress(_config["Email:FromEmail"] ?? "no-reply@milkyverse.com", "MilkyVerse Tea"),
-                    Subject = $"[{otpCode}] Mã xác thực tài khoản MilkyVerse",
-                    Body = $"Chào bạn,\n\nMã xác nhận tài khoản MilkyVerse của bạn là: {otpCode}\n\nMã có hiệu lực trong 10 phút. Tuyệt đối không chia sẻ mã này cho người khác.\n\nTrân trọng,\nĐội ngũ MilkyVerse.",
-                    IsBodyHtml = false
-                };
-                mail.To.Add(normalizedEmail);
-
-                await client.SendMailAsync(mail);
-                sentViaSmtp = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[MilkyVerse SMTP Info] Không gửi được qua SMTP: {ex.Message}. Mã OTP: {otpCode}");
-            }
+            return ApiResponse<SendOtpResultDto>.Fail(
+                "Chưa cấu hình Mật khẩu ứng dụng (App Password 16 ký tự) cho Gmail 'milkyverse103@gmail.com'. Vui lòng điền App Password vào mục Email:Password trong appsettings.json (hoặc biến môi trường MILKYVERSE_SMTP_APP_PASSWORD).");
         }
 
-        Console.WriteLine($"=================================================");
-        Console.WriteLine($"[MILKYVERSE EMAIL VERIFICATION OTP]");
-        Console.WriteLine($"Email: {normalizedEmail}");
-        Console.WriteLine($"MÃ XÁC THỰC 6 SỐ: {otpCode}");
-        Console.WriteLine($"Hiệu lực đến: {verification.ExpiresAt:HH:mm:ss} UTC");
-        Console.WriteLine($"=================================================");
+        try
+        {
+            using var client = new SmtpClient(smtpHost)
+            {
+                Port = int.TryParse(smtpPortStr, out var port) ? port : 587,
+                Credentials = new NetworkCredential(smtpUser!.Trim(), smtpPass.Replace(" ", "").Trim()),
+                EnableSsl = true,
+                DeliveryMethod = SmtpDeliveryMethod.Network,
+                UseDefaultCredentials = false,
+                Timeout = 20000
+            };
 
-        string message = sentViaSmtp
-            ? $"Đã gửi mã xác nhận 6 số đến email {normalizedEmail}. Vui lòng kiểm tra hộp thư."
-            : $"Mã xác thực tài khoản của bạn là: {otpCode}";
+            string actionTitle = cleanPurpose == "forgot-password"
+                ? "Khôi Phục Mật Khẩu Tài Khoản"
+                : "Kích Hoạt Đăng Ký Tài Khoản";
+
+            string htmlBody = $@"
+<!DOCTYPE html>
+<html lang='vi'>
+<head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:24px;background-color:#FAF7F2;font-family:Arial,sans-serif;color:#2D2522;'>
+  <div style='max-width:520px;margin:0 auto;background:#FFFFFF;border:1px solid #EFE6DC;border-radius:24px;overflow:hidden;box-shadow:0 8px 24px rgba(111,78,55,0.08);'>
+    <div style='background:linear-gradient(135deg,#4A3324,#6F4E37);padding:24px;text-align:center;color:#FAF7F2;'>
+      <h1 style='margin:0;font-size:22px;letter-spacing:1.5px;'>🧋 MILKYVERSE</h1>
+      <p style='margin:6px 0 0;font-size:12px;color:#F7D6D0;'>Một ly trà sữa, ngàn cách tận hưởng</p>
+    </div>
+    <div style='padding:28px 24px;text-align:center;'>
+      <h2 style='margin:0 0 12px;font-size:18px;color:#4A3324;'>{actionTitle}</h2>
+      <p style='font-size:13px;color:#786C65;line-height:1.6;margin:0 0 20px;'>
+        Xin chào <strong>{normalizedEmail}</strong>,<br/>
+        Sử dụng mã OTP gồm 6 chữ số dưới đây để hoàn tất xác thực trên hệ thống MilkyVerse:
+      </p>
+      <div style='display:inline-block;background:#FAF7F2;border:2px dashed #6F4E37;border-radius:16px;padding:16px 32px;margin:8px 0 20px;'>
+        <span style='font-size:32px;font-weight:900;letter-spacing:10px;color:#6F4E37;font-family:monospace;'>{otpCode}</span>
+      </div>
+      <p style='font-size:12px;color:#B91C1C;font-weight:bold;margin:0 0 16px;'>
+        ⏳ Mã OTP có hiệu lực trong vòng {expiryMinutes} phút và chỉ sử dụng 1 lần duy nhất.
+      </p>
+      <p style='font-size:11px;color:#786C65;line-height:1.5;margin:0;border-top:1px solid #EFE6DC;padding-top:16px;'>
+        Vì lý do bảo mật, tuyệt đối không chia sẻ mã này cho bất kỳ ai. Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.
+      </p>
+    </div>
+  </div>
+</body>
+</html>";
+
+            using var mail = new MailMessage
+            {
+                From = new MailAddress(fromEmail, fromName, Encoding.UTF8),
+                Subject = $"[{otpCode}] Mã OTP {actionTitle} - MILKYVERSE",
+                Body = htmlBody,
+                IsBodyHtml = true,
+                BodyEncoding = Encoding.UTF8,
+                SubjectEncoding = Encoding.UTF8
+            };
+            mail.To.Add(normalizedEmail);
+
+            await client.SendMailAsync(mail);
+        }
+        catch (Exception ex)
+        {
+            // Hủy bản ghi OTP vừa tạo nếu gửi mail thất bại để người dùng gửi lại ngay mà không bị vướng cooldown
+            _context.EmailVerifications.Remove(verification);
+            await _context.SaveChangesAsync();
+            return ApiResponse<SendOtpResultDto>.Fail($"Không thể gửi email OTP từ '{smtpUser}' qua Gmail SMTP: {ex.Message}. Vui lòng kiểm tra lại App Password 16 ký tự của Gmail.");
+        }
+
+        string message = $"Đã gửi mã xác thực OTP 6 chữ số từ {fromEmail} đến hộp thư {normalizedEmail} (hiệu lực {expiryMinutes} phút). Vui lòng kiểm tra Inbox hoặc mục Thư rác (Spam).";
 
         return ApiResponse<SendOtpResultDto>.Ok(new SendOtpResultDto
         {
             Email = normalizedEmail,
-            Code = otpCode,
+            Code = string.Empty, // Bảo mật tuyệt đối: Không bao giờ trả mã OTP về trình duyệt
             Message = message,
-            SentViaSmtp = sentViaSmtp
+            SentViaSmtp = true,
+            ExpiresInSeconds = expiryMinutes * 60,
+            ResendCooldownSeconds = resendCooldownSec
         }, message);
     }
 
-    public async Task<ApiResponse<bool>> VerifyEmailOtpAsync(string email, string code)
+    public async Task<ApiResponse<bool>> VerifyEmailOtpAsync(string email, string code, bool consumeNow = true)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(code))
         {
-            return ApiResponse<bool>.Fail("Vui lòng cung cấp email và mã xác thực.");
+            return ApiResponse<bool>.Fail("Vui lòng nhập đầy đủ địa chỉ email và mã OTP 6 chữ số.");
         }
 
-        var normalizedEmail = email.Trim().ToLower();
-        var record = await _context.EmailVerifications
-            .Where(v => v.Email == normalizedEmail && v.Code == code.Trim() && !v.IsUsed)
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var cleanCode = code.Trim();
+
+        if (cleanCode.Length != 6 || !cleanCode.All(char.IsDigit))
+        {
+            return ApiResponse<bool>.Fail("Mã OTP phải bao gồm đúng 6 chữ số.");
+        }
+
+        int maxFailed = int.TryParse(_config["Email:MaxFailedAttempts"], out var mf) ? mf : 5;
+
+        // Lấy bản ghi OTP mới nhất chưa sử dụng của email này
+        var latestRecord = await _context.EmailVerifications
+            .Where(v => v.Email == normalizedEmail && !v.IsUsed)
             .OrderByDescending(v => v.CreatedAt)
             .FirstOrDefaultAsync();
 
-        if (record == null)
+        if (latestRecord == null)
         {
-            return ApiResponse<bool>.Fail("Mã xác thực không chính xác hoặc đã được sử dụng.");
+            return ApiResponse<bool>.Fail("Không tìm thấy mã OTP hợp lệ hoặc mã đã được sử dụng. Vui lòng bấm 'Gửi lại mã OTP'.");
         }
 
-        if (DateTime.UtcNow > record.ExpiresAt)
+        if (DateTime.UtcNow > latestRecord.ExpiresAt)
         {
-            return ApiResponse<bool>.Fail("Mã xác thực đã hết hạn (quá 10 phút). Vui lòng yêu cầu mã mới.");
+            latestRecord.IsUsed = true;
+            await _context.SaveChangesAsync();
+            return ApiResponse<bool>.Fail("Mã xác thực OTP đã hết hạn (quá 5 phút). Vui lòng bấm 'Gửi lại mã OTP' để nhận mã mới.");
         }
 
-        record.IsUsed = true;
-        await _context.SaveChangesAsync();
+        if (!string.Equals(latestRecord.Code, cleanCode, StringComparison.Ordinal))
+        {
+            int fails = _failedAttemptsByEmail.AddOrUpdate(normalizedEmail, 1, (_, count) => count + 1);
+            int remaining = Math.Max(0, maxFailed - fails);
 
-        return ApiResponse<bool>.Ok(true, "Xác thực email thành công!");
+            if (fails >= maxFailed)
+            {
+                latestRecord.IsUsed = true;
+                await _context.SaveChangesAsync();
+                _failedAttemptsByEmail.TryRemove(normalizedEmail, out _);
+                return ApiResponse<bool>.Fail($"Bạn đã nhập sai mã OTP quá {maxFailed} lần cho phép. Mã OTP này đã bị khóa, vui lòng yêu cầu gửi lại mã mới.");
+            }
+
+            return ApiResponse<bool>.Fail($"Mã xác thực OTP không chính xác. Bạn còn {remaining} lần thử trước khi mã bị vô hiệu hóa.");
+        }
+
+        // Xác thực khớp thành công -> Xóa bộ đếm lỗi
+        _failedAttemptsByEmail.TryRemove(normalizedEmail, out _);
+        _verifiedResetSessions[normalizedEmail] = (cleanCode, DateTime.UtcNow);
+
+        if (consumeNow)
+        {
+            latestRecord.IsUsed = true;
+            await _context.SaveChangesAsync();
+        }
+
+        return ApiResponse<bool>.Ok(true, "Xác thực mã OTP thành công!");
     }
 
     public async Task<ApiResponse<bool>> ResetPasswordAsync(ResetPasswordRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.NewPassword))
         {
-            return ApiResponse<bool>.Fail("Vui lòng điền đầy đủ email, mã OTP và mật khẩu mới.");
+            return ApiResponse<bool>.Fail("Vui lòng cung cấp đầy đủ email, mã OTP đã xác thực và mật khẩu mới.");
         }
 
-        var normalizedEmail = request.Email.Trim().ToLower();
+        if (!string.IsNullOrEmpty(request.ConfirmPassword) && request.NewPassword != request.ConfirmPassword)
+        {
+            return ApiResponse<bool>.Fail("Mật khẩu xác nhận không trùng khớp với mật khẩu mới.");
+        }
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
         if (user == null)
         {
-            return ApiResponse<bool>.Fail("Không tìm thấy tài khoản với email này.");
+            return ApiResponse<bool>.Fail("Không tìm thấy tài khoản đã đăng ký với địa chỉ email này.");
         }
 
         if (!IsPasswordStrong(request.NewPassword, out var passError))
@@ -162,28 +310,38 @@ public class AuthService : IAuthService
         }
 
         var cleanCode = request.Code.Trim();
-        var record = await _context.EmailVerifications
-            .Where(v => v.Email == normalizedEmail && v.Code == cleanCode && !v.IsUsed)
-            .OrderByDescending(v => v.CreatedAt)
-            .FirstOrDefaultAsync();
 
-        if (record == null)
+        // Kiểm tra OTP trong DB (hoặc phiên vừa verify ở Bước 2 trong vòng 5 phút)
+        var verifyResult = await VerifyEmailOtpAsync(normalizedEmail, cleanCode, consumeNow: true);
+        if (!verifyResult.Success)
         {
-            return ApiResponse<bool>.Fail("Mã xác thực OTP không chính xác hoặc đã sử dụng.");
+            // Kiểm tra xem mã vừa được consume ở bước VerifyOtp cách đây < 5 phút không
+            if (!_verifiedResetSessions.TryGetValue(normalizedEmail, out var session) ||
+                session.Code != cleanCode ||
+                (DateTime.UtcNow - session.VerifiedAt).TotalMinutes > 5)
+            {
+                return verifyResult;
+            }
         }
 
-        if (DateTime.UtcNow > record.ExpiresAt)
+        // Vô hiệu hóa toàn bộ OTP cũ của email này trong Database
+        var allUnused = await _context.EmailVerifications
+            .Where(v => v.Email == normalizedEmail && !v.IsUsed)
+            .ToListAsync();
+        foreach (var item in allUnused)
         {
-            return ApiResponse<bool>.Fail("Mã xác thực OTP đã hết hạn (quá 10 phút). Vui lòng yêu cầu mã mới.");
+            item.IsUsed = true;
         }
+        _verifiedResetSessions.TryRemove(normalizedEmail, out _);
 
-        record.IsUsed = true;
+        // Hash mật khẩu mới và cập nhật Database
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.IsEmailVerified = true;
         user.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
-        return ApiResponse<bool>.Ok(true, "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới.");
+        return ApiResponse<bool>.Ok(true, "Đổi mật khẩu mới thành công! Mã OTP cũ đã được vô hiệu hóa. Bạn có thể đăng nhập ngay bằng mật khẩu mới.");
     }
 
     public async Task<ApiResponse<AuthResponse>> RegisterAsync(RegisterRequest request)
@@ -193,59 +351,68 @@ public class AuthService : IAuthService
             return ApiResponse<AuthResponse>.Fail("Email và mật khẩu không được để trống.");
         }
 
-        var normalizedEmail = request.Email.Trim().ToLower();
-        var exists = await _context.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail);
-        if (exists)
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
+        if (existingUser != null && existingUser.IsEmailVerified)
         {
-            return ApiResponse<AuthResponse>.Fail("Email này đã được đăng ký trên hệ thống.");
+            return ApiResponse<AuthResponse>.Fail("Email này đã được đăng ký và kích hoạt trên hệ thống.");
         }
 
-        // Validate password complexity
         if (!IsPasswordStrong(request.Password, out var passError))
         {
             return ApiResponse<AuthResponse>.Fail(passError);
         }
 
-        // Verify OTP if code is provided
-        if (!string.IsNullOrWhiteSpace(request.VerificationCode))
+        if (string.IsNullOrWhiteSpace(request.VerificationCode))
         {
-            var cleanCode = request.VerificationCode.Trim();
-            var record = await _context.EmailVerifications
-                .Where(v => v.Email == normalizedEmail && v.Code == cleanCode)
-                .OrderByDescending(v => v.CreatedAt)
-                .FirstOrDefaultAsync();
+            return ApiResponse<AuthResponse>.Fail("Bắt buộc phải nhập mã xác thực OTP 6 chữ số gửi tới email để kích hoạt tài khoản.");
+        }
 
-            if (record == null)
-            {
-                return ApiResponse<AuthResponse>.Fail("Mã xác thực OTP không chính xác.");
-            }
+        // Xác thực OTP nghiêm ngặt (kiểm tra 5 phút, giới hạn 5 lần sai, đánh dấu IsUsed = true ngay sau khi dùng)
+        var otpCheck = await VerifyEmailOtpAsync(normalizedEmail, request.VerificationCode.Trim(), consumeNow: true);
+        if (!otpCheck.Success)
+        {
+            return ApiResponse<AuthResponse>.Fail(otpCheck.Message);
+        }
 
-            if (DateTime.UtcNow > record.ExpiresAt)
-            {
-                return ApiResponse<AuthResponse>.Fail("Mã xác thực OTP đã hết hạn. Vui lòng yêu cầu mã mới.");
-            }
+        // Vô hiệu hóa tất cả OTP còn lại của email này
+        var remainingOtps = await _context.EmailVerifications
+            .Where(v => v.Email == normalizedEmail && !v.IsUsed)
+            .ToListAsync();
+        foreach (var r in remainingOtps)
+        {
+            r.IsUsed = true;
+        }
 
-            record.IsUsed = true;
-            await _context.SaveChangesAsync();
+        User user;
+        if (existingUser != null)
+        {
+            user = existingUser;
+            user.FullName = request.FullName?.Trim() ?? user.FullName;
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+            user.PhoneNumber = request.PhoneNumber?.Trim() ?? user.PhoneNumber;
+            user.Address = request.Address?.Trim() ?? user.Address;
+            user.IsEmailVerified = true;
+            user.IsActive = true;
+            user.UpdatedAt = DateTime.UtcNow;
         }
         else
         {
-            return ApiResponse<AuthResponse>.Fail("Vui lòng nhập mã xác thực OTP gửi đến email của bạn.");
+            user = new User
+            {
+                FullName = request.FullName?.Trim() ?? string.Empty,
+                Email = normalizedEmail,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                PhoneNumber = request.PhoneNumber?.Trim() ?? string.Empty,
+                Address = request.Address?.Trim() ?? string.Empty,
+                Role = "Customer",
+                IsActive = true,
+                IsEmailVerified = true,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.Users.Add(user);
         }
 
-        var user = new User
-        {
-            FullName = request.FullName?.Trim() ?? string.Empty,
-            Email = normalizedEmail,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-            PhoneNumber = request.PhoneNumber?.Trim() ?? string.Empty,
-            Address = request.Address?.Trim() ?? string.Empty,
-            Role = "Customer",
-            IsEmailVerified = true,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
         var token = GenerateJwtToken(user);
@@ -260,17 +427,32 @@ public class AuthService : IAuthService
             PhoneNumber = user.PhoneNumber,
             Address = user.Address,
             AvatarUrl = user.AvatarUrl
-        }, "Đăng ký và xác thực tài khoản thành công!");
+        }, "Xác thực OTP thành công! Tài khoản của bạn đã được kích hoạt và đăng nhập.");
     }
 
     public async Task<ApiResponse<AuthResponse>> LoginAsync(LoginRequest request)
     {
-        var normalizedEmail = request.Email.Trim().ToLower();
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        {
+            return ApiResponse<AuthResponse>.Fail("Vui lòng nhập đầy đủ email và mật khẩu.");
+        }
+
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail);
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        if (user == null || !VerifyPasswordHash(user, request.Password))
         {
             return ApiResponse<AuthResponse>.Fail("Email hoặc mật khẩu không chính xác.");
+        }
+
+        if (!user.IsEmailVerified)
+        {
+            return ApiResponse<AuthResponse>.Fail("Tài khoản chưa được kích hoạt xác thực OTP qua email. Vui lòng hoàn tất xác thực OTP trước khi đăng nhập.");
+        }
+
+        if (!user.IsActive)
+        {
+            return ApiResponse<AuthResponse>.Fail("Tài khoản của bạn hiện đang bị khóa. Vui lòng liên hệ Quản trị viên MilkyVerse.");
         }
 
         var token = GenerateJwtToken(user);
@@ -286,6 +468,20 @@ public class AuthService : IAuthService
             Address = user.Address,
             AvatarUrl = user.AvatarUrl
         }, "Đăng nhập thành công!");
+    }
+
+    private bool VerifyPasswordHash(User user, string plainPassword)
+    {
+        if (string.IsNullOrEmpty(user.PasswordHash)) return false;
+
+        // Hỗ trợ cả BCrypt ($2a$, $2b$, $2y$) và ASP.NET Core Identity PasswordHasher
+        if (user.PasswordHash.StartsWith("$2"))
+        {
+            return BCrypt.Net.BCrypt.Verify(plainPassword, user.PasswordHash);
+        }
+
+        var res = _identityHasher.VerifyHashedPassword(user, user.PasswordHash, plainPassword);
+        return res != PasswordVerificationResult.Failed;
     }
 
     public async Task<ApiResponse<UserProfileDto>> GetProfileAsync(int userId)
@@ -305,6 +501,7 @@ public class AuthService : IAuthService
             Address = user.Address,
             AvatarUrl = user.AvatarUrl,
             Role = user.Role,
+            IsActive = user.IsActive,
             CreatedAt = user.CreatedAt
         });
     }
@@ -342,6 +539,7 @@ public class AuthService : IAuthService
             Address = user.Address ?? "",
             AvatarUrl = user.AvatarUrl,
             Role = user.Role,
+            IsActive = user.IsActive,
             CreatedAt = user.CreatedAt
         }, "Cập nhật hồ sơ thành công!");
     }

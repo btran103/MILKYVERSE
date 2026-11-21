@@ -55,9 +55,9 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 2-minute countdown for transfer
+  // 2-minute countdown for online transfer (VIETQR or MOMO/ZaloPay)
   useEffect(() => {
-    if (paymentMethod !== "VIETQR") return;
+    if (paymentMethod === "COD") return;
     const interval = setInterval(() => {
       setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
@@ -470,22 +470,26 @@ export default function CheckoutPage() {
                     : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
                 }`}
               >
-                <Smartphone className="w-5 h-5 text-[#A50064] shrink-0" />
+                <Smartphone className="w-5 h-5 text-[#0068FF] shrink-0" />
                 <div>
-                  <h4 className="font-bold text-xs text-[#2D2522]">Ví MoMo</h4>
+                  <h4 className="font-bold text-xs text-[#2D2522]">ZaloPay / Ví Đa Năng</h4>
                   <p className="text-[10px] text-[#786C65] mt-0.5">
-                    Thanh toán nhanh qua ví điện tử MoMo.
+                    QR nhận tiền từ ZaloPay, MoMo &amp; 50+ ứng dụng ngân hàng.
                   </p>
                 </div>
               </button>
             </div>
 
-            {paymentMethod === "VIETQR" && (
+            {(paymentMethod === "VIETQR" || paymentMethod === "MOMO") && (
               <div className="p-4 rounded-3xl bg-[#FAF7F2] border border-[#EFE6DC] space-y-3 text-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[#6F4E37] font-bold">
                     <Sparkles className="w-4 h-4 text-[#C5A059]" />
-                    <span>Mã VietQR Napas247 Tự Động Tạo (Hiệu lực 2 phút):</span>
+                    <span>
+                      {paymentMethod === "VIETQR"
+                        ? "Mã QR TPBank VietQR Chính Chủ (Xác thực Ngrok):"
+                        : "Mã QR ZaloPay / Đa Ngân Hàng Chính Chủ (Xác thực Ngrok):"}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 font-mono font-bold text-xs border border-red-200">
                     <Clock className="w-3.5 h-3.5" />
@@ -501,30 +505,36 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-3 rounded-2xl border border-[#EFE6DC]">
-                  <div className="w-36 h-36 bg-white p-1 rounded-xl border border-[#EFE6DC] shrink-0 shadow-2xs flex items-center justify-center">
+                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-2xl border border-[#EFE6DC]">
+                  <div className="w-48 h-56 bg-white p-1.5 rounded-2xl border-2 border-[#6F4E37]/30 shrink-0 shadow-sm flex items-center justify-center overflow-hidden">
                     <img
-                      src={vietQrUrl}
-                      alt="VietQR Chuyển Khoản"
-                      className="w-full h-full object-contain rounded-lg"
+                      src={paymentMethod === "VIETQR" ? "/images/qr-tpbank.png" : "/images/qr-zalopay.png"}
+                      alt={paymentMethod === "VIETQR" ? "TPBank VietQR HA BAO TRAN" : "ZaloPay QR HA BAO TRAN"}
+                      className="w-full h-full object-contain rounded-xl"
                     />
                   </div>
 
-                  <div className="space-y-1.5 text-[11px] w-full">
+                  <div className="space-y-2 text-[11px] w-full">
                     <div>
-                      <span className="text-[#786C65] block text-[10px]">Ngân hàng nhận:</span>
-                      <strong className="text-[#2D2522]">MB Bank (Ngân Hàng Quân Đội)</strong>
+                      <span className="text-[#786C65] block text-[10px]">
+                        {paymentMethod === "VIETQR" ? "Ngân hàng thụ hưởng:" : "Cổng thanh toán:"}
+                      </span>
+                      <strong className="text-[#2D2522]">
+                        {paymentMethod === "VIETQR"
+                          ? "TPBank (Ngân Hàng Tiên Phong - VietQR Napas247)"
+                          : "ZaloPay / VietQR Đa Năng (Hỗ trợ 50+ Ngân hàng & Ví)"}
+                      </strong>
                     </div>
                     <div>
-                      <span className="text-[#786C65] block text-[10px]">Số tài khoản:</span>
-                      <strong className="text-[#6F4E37] font-mono text-sm tracking-wider">0358899888</strong>
+                      <span className="text-[#786C65] block text-[10px]">Số tài khoản nhận:</span>
+                      <strong className="text-[#6F4E37] font-mono text-sm tracking-wider">0000 0107 071</strong>
                     </div>
                     <div>
-                      <span className="text-[#786C65] block text-[10px]">Tên chủ tài khoản:</span>
-                      <strong className="text-[#2D2522]">MILKYVERSE STORE</strong>
+                      <span className="text-[#786C65] block text-[10px]">Chủ tài khoản xác thực:</span>
+                      <strong className="text-[#2D2522] text-sm">HA BAO TRAN</strong>
                     </div>
                     <div>
-                      <span className="text-[#786C65] block text-[10px]">Số tiền cần chuyển:</span>
+                      <span className="text-[#786C65] block text-[10px]">Số tiền cần thanh toán:</span>
                       <strong className="text-base font-black text-[#6F4E37]">
                         {finalTotal.toLocaleString("vi-VN")}đ
                       </strong>
@@ -533,7 +543,7 @@ export default function CheckoutPage() {
                 </div>
 
                 <p className="text-[10px] text-[#786C65] italic leading-tight">
-                  * Mở ứng dụng ngân hàng bất kỳ (Vietcombank, MB, Techcombank, TPBank,...) quét mã QR trên để chuyển khoản tự động chính xác số tiền.
+                  * Sau khi bấm <strong>Xác Nhận Đặt Hàng</strong>, hệ thống sẽ chuyển sang cổng <strong>Đếm Ngược Xác Thực Quyền Thanh Toán Online qua Ngrok Webhook</strong>.
                 </p>
               </div>
             )}

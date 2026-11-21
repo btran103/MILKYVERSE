@@ -56,14 +56,20 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   // Auth
-  sendOtp: (email: string) =>
-    request<{ email: string; code: string; message: string; sentViaSmtp: boolean }>("/auth/send-otp", { method: "POST", body: JSON.stringify({ email }) }),
+  sendOtp: (email: string, purpose?: "register" | "forgot-password") =>
+    request<{ email: string; code: string; message: string; sentViaSmtp: boolean; expiresInSeconds?: number; resendCooldownSeconds?: number }>("/auth/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, purpose }),
+    }),
 
-  verifyOtp: (email: string, code: string) =>
-    request<{ message: string }>("/auth/verify-otp", { method: "POST", body: JSON.stringify({ email, code }) }),
+  verifyOtp: (email: string, code: string, purpose?: "register" | "forgot-password") =>
+    request<boolean>("/auth/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, code, purpose }),
+    }),
 
-  resetPassword: (payload: { email: string; code: string; newPassword: string }) =>
-    request<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify(payload) }),
+  resetPassword: (payload: { email: string; code: string; newPassword: string; confirmPassword?: string }) =>
+    request<boolean>("/auth/reset-password", { method: "POST", body: JSON.stringify(payload) }),
 
   register: (payload: { fullName: string; email: string; password: string; verificationCode?: string; phoneNumber?: string; address?: string }) =>
     request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
@@ -132,11 +138,52 @@ export const api = {
       body: JSON.stringify({ code, orderSubtotal: subtotal }),
     }),
 
-  // AI Barista
-  sendAIChat: (message: string, sessionId?: number) =>
-    request<{ sessionId: number; reply: string; suggestedDrinks: SuggestedDrink[]; isAiModelLive: boolean }>("/ai/chat", {
+  getNgrokTunnel: () =>
+    request<{ isRunning: boolean; publicUrl: string | null; webhookUrl: string }>("/orders/ngrok-tunnel"),
+
+  triggerPaymentWebhook: (payload: { orderId?: number; orderCode?: string; amount?: number; transactionRef?: string; provider?: string }) =>
+    request<OrderResponse>("/orders/payment-webhook", {
       method: "POST",
-      body: JSON.stringify({ message, sessionId }),
+      body: JSON.stringify(payload),
+    }),
+
+  // AI Barista
+  getAIStatus: () =>
+    request<{
+      isConfigured: boolean;
+      provider: string;
+      activeModel: string;
+      maskedApiKey: string;
+      endpointUrl: string;
+      activeMenuCount: number;
+      activeToppingCount: number;
+    }>("/ai/status"),
+
+  configureAIApiKey: (payload: { apiKey: string; provider?: string; model?: string }) =>
+    request<{
+      isConfigured: boolean;
+      provider: string;
+      activeModel: string;
+      maskedApiKey: string;
+      endpointUrl: string;
+      activeMenuCount: number;
+      activeToppingCount: number;
+    }>("/ai/config", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  sendAIChat: (message: string, sessionId?: number, apiKey?: string, provider?: string) =>
+    request<{
+      sessionId: number;
+      reply: string;
+      suggestedDrinks: SuggestedDrink[];
+      isAiModelLive: boolean;
+      modelName?: string;
+      apiError?: string;
+    }>("/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ message, sessionId, apiKey, provider }),
     }),
 
   // Admin & Manager
@@ -146,6 +193,8 @@ export const api = {
     request<User>("/admin/users/employee", { method: "POST", body: JSON.stringify(payload) }),
   updateUserRole: (userId: number, payload: { role: string; isActive: boolean }) =>
     request<User>(`/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify(payload) }),
+  updateUserDetails: (userId: number, payload: { fullName: string; email?: string; phoneNumber?: string; address?: string; avatarUrl?: string; role?: string; isActive?: boolean; newPassword?: string }) =>
+    request<User>(`/admin/users/${userId}`, { method: "PUT", body: JSON.stringify(payload) }),
   getCustomers: () => request<User[]>("/admin/customers"),
   getPromotions: () => request<Promotion[]>("/admin/promotions"),
   createPromotion: (promo: Partial<Promotion>) => request<Promotion>("/admin/promotions", { method: "POST", body: JSON.stringify(promo) }),

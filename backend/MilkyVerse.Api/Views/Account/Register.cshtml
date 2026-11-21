@@ -1,0 +1,175 @@
+@{
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Đăng Ký Tài Khoản Xác Thực OTP";
+}
+
+<div class="mv-card">
+    <h1 class="mv-title" id="regTitle">Tạo Tài Khoản Mới</h1>
+    <p class="mv-subtitle" id="regSubtitle">Đăng ký thành viên MilkyVerse &amp; nhận mã OTP 6 chữ số qua Gmail SMTP (Hiệu lực 5 phút)</p>
+
+    <div id="alertError" class="mv-alert mv-alert-error"></div>
+    <div id="alertSuccess" class="mv-alert mv-alert-success"></div>
+
+    <!-- BƯỚC 1: NHẬP THÔNG TIN TÀI KHOẢN -->
+    <form id="step1Form" onsubmit="handleSendRegisterOtp(event)">
+        <label class="mv-label">Họ và tên *</label>
+        <input type="text" id="fullName" class="mv-input" required placeholder="Ví dụ: Hà Bảo Trân" />
+
+        <label class="mv-label">Email đăng ký (Nhận OTP thật qua Gmail) *</label>
+        <input type="email" id="email" class="mv-input" required placeholder="ten@gmail.com" />
+
+        <label class="mv-label">Số điện thoại</label>
+        <input type="tel" id="phone" class="mv-input" placeholder="0901234567" />
+
+        <label class="mv-label">Địa chỉ giao hàng</label>
+        <input type="text" id="address" class="mv-input" placeholder="Số nhà, đường, quận/huyện..." />
+
+        <label class="mv-label">Mật khẩu (Tối thiểu 8 ký tự, chữ Hoa, thường, số, ký tự đặc biệt) *</label>
+        <input type="password" id="password" class="mv-input" required placeholder="Ví dụ: Milky@2026" />
+
+        <label class="mv-label">Xác nhận mật khẩu *</label>
+        <input type="password" id="confirmPassword" class="mv-input" required placeholder="Nhập lại mật khẩu" />
+
+        <button type="submit" id="btnSendOtp" class="mv-btn">Đăng Ký &amp; Gửi Mã OTP Qua Email</button>
+    </form>
+
+    <!-- BƯỚC 2: XÁC THỰC MÃ OTP 6 CHỮ SỐ -->
+    <form id="step2Form" style="display:none;" onsubmit="handleVerifyAndActivate(event)">
+        <div class="mv-timer-box">
+            <span>⏳ Thời gian hiệu lực OTP (5 phút):</span>
+            <span id="otpTimer" style="color:#B91C1C;font-family:monospace;font-size:15px;">05:00</span>
+        </div>
+
+        <label class="mv-label" style="text-align:center;">Nhập mã OTP 6 chữ số đã gửi tới Email</label>
+        <input type="text" id="otpCode" maxlength="6" class="mv-input mv-otp-input" required placeholder="••••••" />
+
+        <button type="submit" id="btnVerify" class="mv-btn">Xác Thực OTP &amp; Kích Hoạt Tài Khoản</button>
+        <button type="button" id="btnResend" class="mv-btn mv-btn-outline" onclick="handleResendRegisterOtp()">Gửi lại mã OTP</button>
+        <button type="button" class="mv-btn mv-btn-outline" onclick="backToStep1()">Quay lại sửa thông tin</button>
+    </form>
+</div>
+
+<script>
+    let expirySeconds = 300;
+    let resendCooldown = 0;
+    let timerInterval = null;
+
+    function showError(msg) {
+        const el = document.getElementById('alertError');
+        el.innerText = msg;
+        el.style.display = 'block';
+        document.getElementById('alertSuccess').style.display = 'none';
+    }
+
+    function showSuccess(msg) {
+        const el = document.getElementById('alertSuccess');
+        el.innerText = msg;
+        el.style.display = 'block';
+        document.getElementById('alertError').style.display = 'none';
+    }
+
+    function startTimers(expSec, cdSec) {
+        expirySeconds = expSec || 300;
+        resendCooldown = cdSec || 60;
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (expirySeconds > 0) expirySeconds--;
+            const m = String(Math.floor(expirySeconds / 60)).padStart(2, '0');
+            const s = String(expirySeconds % 60).padStart(2, '0');
+            document.getElementById('otpTimer').innerText = `${m}:${s}`;
+
+            const btnResend = document.getElementById('btnResend');
+            if (resendCooldown > 0) {
+                resendCooldown--;
+                btnResend.disabled = true;
+                btnResend.innerText = `Gửi lại mã OTP (${resendCooldown}s)`;
+            } else {
+                btnResend.disabled = false;
+                btnResend.innerText = 'Gửi lại mã OTP';
+            }
+        }, 1000);
+    }
+
+    async function handleSendRegisterOtp(e) {
+        e.preventDefault();
+        const pass = document.getElementById('password').value;
+        const confirm = document.getElementById('confirmPassword').value;
+        if (pass !== confirm) {
+            showError('Mật khẩu xác nhận không trùng khớp.');
+            return;
+        }
+        const email = document.getElementById('email').value.trim();
+        const btn = document.getElementById('btnSendOtp');
+        btn.disabled = true;
+        btn.innerText = 'Đang gửi mã OTP...';
+
+        try {
+            const res = await fetch('/api/auth/send-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, purpose: 'register' })
+            });
+            const json = await res.json();
+            if (!res.ok || !json.success) {
+                showError(json.message || 'Không thể gửi mã OTP.');
+                return;
+            }
+            document.getElementById('step1Form').style.display = 'none';
+            document.getElementById('step2Form').style.display = 'block';
+            document.getElementById('regTitle').innerText = 'Xác Thực Mã OTP 6 Số';
+            showSuccess(`Đã gửi mã OTP 6 chữ số từ milkyverse103@gmail.com tới hộp thư ${email}. Vui lòng mở Gmail để lấy mã.`);
+            startTimers(json.data?.expiresInSeconds || 300, json.data?.resendCooldownSeconds || 60);
+        } catch (err) {
+            showError('Lỗi kết nối máy chủ.');
+        } finally {
+            btn.disabled = false;
+            btn.innerText = 'Đăng Ký & Gửi Mã OTP Qua Email';
+        }
+    }
+
+    async function handleResendRegisterOtp() {
+        const email = document.getElementById('email').value.trim();
+        const res = await fetch('/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, purpose: 'register' })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+            showError(json.message || 'Không thể gửi lại mã OTP.');
+            return;
+        }
+        showSuccess(json.message);
+        startTimers(json.data?.expiresInSeconds || 300, json.data?.resendCooldownSeconds || 60);
+    }
+
+    async function handleVerifyAndActivate(e) {
+        e.preventDefault();
+        const payload = {
+            fullName: document.getElementById('fullName').value.trim(),
+            email: document.getElementById('email').value.trim(),
+            phoneNumber: document.getElementById('phone').value.trim(),
+            address: document.getElementById('address').value.trim(),
+            password: document.getElementById('password').value,
+            verificationCode: document.getElementById('otpCode').value.trim()
+        };
+
+        const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+            showError(json.message || 'Xác thực OTP thất bại.');
+            return;
+        }
+        showSuccess('Kích hoạt tài khoản thành công! Đang chuyển sang trang Đăng nhập...');
+        setTimeout(() => { window.location.href = '/Account/Login'; }, 1800);
+    }
+
+    function backToStep1() {
+        document.getElementById('step2Form').style.display = 'none';
+        document.getElementById('step1Form').style.display = 'block';
+    }
+</script>

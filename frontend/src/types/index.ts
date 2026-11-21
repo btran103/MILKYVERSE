@@ -309,7 +309,19 @@ export interface AIChatMessage {
   content: string;
   suggestedDrinks?: SuggestedDrink[];
   isAiModelLive?: boolean;
+  modelName?: string;
+  apiError?: string;
   timestamp: string;
+}
+
+export interface AIStatusResponse {
+  isConfigured: boolean;
+  provider: string;
+  activeModel: string;
+  maskedApiKey: string;
+  endpointUrl: string;
+  activeMenuCount: number;
+  activeToppingCount: number;
 }
 
 export interface DashboardSummary {

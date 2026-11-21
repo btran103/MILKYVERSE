@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - MILKYVERSE Tea &amp; Food</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --milky-cream: #FAF7F2;
+            --milky-brown: #6F4E37;
+            --milky-brown-dark: #4A3324;
+            --milky-pink: #F7D6D0;
+            --milky-text: #2D2522;
+            --milky-muted: #786C65;
+            --milky-border: #EFE6DC;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--milky-cream);
+            color: var(--milky-text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .mv-navbar {
+            background: rgba(250, 247, 242, 0.96);
+            border-bottom: 1px solid var(--milky-border);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .mv-brand {
+            font-weight: 900;
+            font-size: 20px;
+            color: var(--milky-brown);
+            text-decoration: none;
+            letter-spacing: 1px;
+        }
+        .mv-nav-links a {
+            color: var(--milky-text);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 700;
+            margin-left: 16px;
+            padding: 8px 14px;
+            border-radius: 12px;
+        }
+        .mv-nav-links a:hover {
+            background: var(--milky-pink);
+            color: var(--milky-brown-dark);
+        }
+        .mv-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 16px;
+        }
+        .mv-card {
+            background: #FFFFFF;
+            border: 1px solid var(--milky-border);
+            border-radius: 24px;
+            padding: 32px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 0 12px 32px rgba(111, 78, 55, 0.08);
+        }
+        .mv-title {
+            font-size: 22px;
+            font-weight: 900;
+            margin: 0 0 6px;
+            text-align: center;
+        }
+        .mv-subtitle {
+            font-size: 12px;
+            color: var(--milky-muted);
+            text-align: center;
+            margin: 0 0 20px;
+            line-height: 1.5;
+        }
+        .mv-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .mv-input {
+            width: 100%;
+            padding: 11px 14px;
+            border-radius: 14px;
+            border: 1px solid var(--milky-border);
+            background: var(--milky-cream);
+            font-family: inherit;
+            font-size: 13px;
+            margin-bottom: 14px;
+            outline: none;
+        }
+        .mv-input:focus {
+            border-color: var(--milky-brown);
+            background: #FFF;
+        }
+        .mv-otp-input {
+            text-align: center;
+            font-size: 24px;
+            font-weight: 900;
+            letter-spacing: 10px;
+            color: var(--milky-brown);
+            font-family: monospace;
+        }
+        .mv-btn {
+            width: 100%;
+            padding: 13px 18px;
+            border-radius: 16px;
+            border: none;
+            background: var(--milky-brown);
+            color: #FFF;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .mv-btn:hover:not(:disabled) {
+            background: var(--milky-brown-dark);
+        }
+        .mv-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+        .mv-btn-outline {
+            background: #FFF;
+            color: var(--milky-brown);
+            border: 1px solid var(--milky-border);
+            margin-top: 8px;
+        }
+        .mv-alert {
+            padding: 12px 14px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .mv-alert-error {
+            background: #FEF2F2;
+            color: #B91C1C;
+            border: 1px solid #FECACA;
+        }
+        .mv-alert-success {
+            background: #ECFDF5;
+            color: #047857;
+            border: 1px solid #A7F3D0;
+        }
+        .mv-timer-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #FFFBEB;
+            border: 1px solid #FDE68A;
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header class="mv-navbar">
+        <a href="http://localhost:3000" class="mv-brand">🧋 MILKYVERSE</a>
+        <nav class="mv-nav-links">
+            <a href="/Account/Login">Đăng Nhập</a>
+            <a href="/Account/Register">Đăng Ký OTP</a>
+            <a href="/Account/ForgotPassword">Quên Mật Khẩu OTP</a>
+        </nav>
+    </header>
+    <main class="mv-container">
+        @RenderBody()
+    </main>
+</body>
+</html>

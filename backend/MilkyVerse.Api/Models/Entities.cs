@@ -26,7 +26,6 @@ public class User
     [MaxLength(255)]
     public string Address { get; set; } = string.Empty;
 
-    [MaxLength(500)]
     public string? AvatarUrl { get; set; }
 
     [Required]

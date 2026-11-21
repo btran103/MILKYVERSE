@@ -106,15 +106,13 @@ export default function RegisterPage() {
       return;
     }
 
-    // Call API to send OTP to the user's email
+    // Call API to send OTP to the user's email (purpose = "register")
     setLoading(true);
     try {
-      const res = await api.sendOtp(email.trim());
-      if (res.code) {
-        setReceivedOtpCode(res.code);
-      }
-      setSentViaSmtp(!!res.sentViaSmtp);
-      setOtpSentMessage(res.message || `Mã OTP 6 số đã được chuẩn bị cho ${email.trim()}.`);
+      await api.sendOtp(email.trim(), "register");
+      setReceivedOtpCode(null);
+      setSentViaSmtp(true);
+      setOtpSentMessage(`Đã gửi mã OTP 6 chữ số tới hộp thư ${email.trim()}. Vui lòng mở email để lấy mã xác thực.`);
       startCountdown();
       setStep(2); // Advance to OTP verification screen
     } catch (err: unknown) {
@@ -131,12 +129,10 @@ export default function RegisterPage() {
     setError(null);
     setIsSendingOtp(true);
     try {
-      const res = await api.sendOtp(email.trim());
-      if (res.code) {
-        setReceivedOtpCode(res.code);
-      }
-      setSentViaSmtp(!!res.sentViaSmtp);
-      setOtpSentMessage(res.message || `Đã gửi lại mã OTP mới tới ${email.trim()}.`);
+      await api.sendOtp(email.trim(), "register");
+      setReceivedOtpCode(null);
+      setSentViaSmtp(true);
+      setOtpSentMessage(`Đã gửi lại mã OTP mới tới hộp thư ${email.trim()}. Vui lòng kiểm tra email của bạn.`);
       startCountdown();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Lỗi khi gửi lại mã OTP.";
@@ -236,13 +232,6 @@ export default function RegisterPage() {
         <div className="p-3.5 rounded-2xl bg-red-50 text-red-700 border border-red-200 text-xs flex items-center gap-2.5 animate-in fade-in">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
-        </div>
-      )}
-
-      {otpSentMessage && step === 2 && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs flex items-start gap-2.5 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-          <span>{otpSentMessage}</span>
         </div>
       )}
 
@@ -410,42 +399,16 @@ export default function RegisterPage() {
       {step === 2 && (
         <form onSubmit={handleVerifyAndRegister} className="bg-white p-6 rounded-3xl border border-[#EFE6DC] shadow-sm space-y-5 animate-in fade-in">
           <div className="text-center space-y-1">
-            <h3 className="text-sm font-black text-[#2D2522]">Nhập mã OTP 6 chữ số</h3>
+            <h3 className="text-sm font-black text-[#2D2522]">Nhập mã OTP 6 chữ số từ Email</h3>
             <p className="text-xs text-[#786C65]">
-              Mã xác nhận bảo mật được gửi đến email: <br />
+              Hệ thống đã gửi mã xác thực 6 số từ <strong>milkyverse103@gmail.com</strong> đến hộp thư: <br />
               <strong className="text-[#6F4E37]">{email}</strong>
             </p>
           </div>
 
-          {/* Hiển thị mã OTP hỗ trợ nếu chưa có SMTP hoặc để test nhanh */}
-          {receivedOtpCode && (
-            <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[#6F4E37] font-bold">Mã OTP của bạn:</span>
-                <span className="font-mono text-base font-black text-[#6F4E37] tracking-widest bg-white px-2.5 py-0.5 rounded-lg border border-amber-300">
-                  {receivedOtpCode}
-                </span>
-              </div>
-              <div className="flex items-center justify-between pt-0.5">
-                <p className="text-[10px] text-[#786C65]">
-                  {sentViaSmtp
-                    ? "Đã gửi đến email của bạn."
-                    : "Mã xác thực được tạo từ hệ thống."}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setVerificationCode(receivedOtpCode)}
-                  className="px-2.5 py-1 rounded-lg bg-[#6F4E37] text-white text-[10px] font-bold hover:bg-[#4A3324] transition-all"
-                >
-                  Tự động điền mã
-                </button>
-              </div>
-            </div>
-          )}
-
           <div>
             <label className="text-xs font-bold text-[#2D2522] block mb-1 text-center">
-              Mã xác thực 6 số
+              Mã xác thực 6 số (Hiệu lực 5 phút)
             </label>
             <div className="relative max-w-xs mx-auto">
               <input

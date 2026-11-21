@@ -7,10 +7,11 @@ using MilkyVerse.Api.Data;
 using MilkyVerse.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 builder.WebHost.UseUrls("http://localhost:5000");
 
-// 1. Controller & JSON serialization
-builder.Services.AddControllers()
+// 1. Controller, MVC Razor Views & JSON serialization
+builder.Services.AddControllersWithViews()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
@@ -125,6 +126,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Account}/{action=Login}/{id?}");
 
 // 7. Seed sample data on startup
 using (var scope = app.Services.CreateScope())

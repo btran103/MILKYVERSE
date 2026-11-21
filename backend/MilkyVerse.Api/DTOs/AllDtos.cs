@@ -16,6 +16,10 @@ public class ApiResponse<T>
 public class SendOtpRequest
 {
     public string Email { get; set; } = string.Empty;
+    /// <summary>
+    /// "register" | "forgot-password" | "general"
+    /// </summary>
+    public string? Purpose { get; set; }
 }
 
 public class SendOtpResultDto
@@ -24,12 +28,15 @@ public class SendOtpResultDto
     public string Code { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public bool SentViaSmtp { get; set; }
+    public int ExpiresInSeconds { get; set; } = 300; // 5 minutes
+    public int ResendCooldownSeconds { get; set; } = 60;
 }
 
 public class VerifyOtpRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
+    public string? Purpose { get; set; }
 }
 
 public class ResetPasswordRequest
@@ -37,6 +44,7 @@ public class ResetPasswordRequest
     public string Email { get; set; } = string.Empty;
     public string Code { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
+    public string? ConfirmPassword { get; set; }
 }
 
 public class RegisterRequest
@@ -95,6 +103,18 @@ public class UpdateUserRoleRequest
 {
     public string Role { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+}
+
+public class UpdateUserDetailsRequest
+{
+    public string FullName { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Address { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? Role { get; set; }
+    public bool? IsActive { get; set; }
+    public string? NewPassword { get; set; }
 }
 
 // ==========================================
@@ -571,6 +591,26 @@ public class AIChatRequest
 {
     public int? SessionId { get; set; }
     public string Message { get; set; } = string.Empty;
+    public string? ApiKey { get; set; }
+    public string? Provider { get; set; }
+}
+
+public class AIConfigRequest
+{
+    public string ApiKey { get; set; } = string.Empty;
+    public string? Provider { get; set; }
+    public string? Model { get; set; }
+}
+
+public class AIStatusResponse
+{
+    public bool IsConfigured { get; set; }
+    public string Provider { get; set; } = "Google Gemini API";
+    public string ActiveModel { get; set; } = "gemini-2.5-flash";
+    public string MaskedApiKey { get; set; } = string.Empty;
+    public string EndpointUrl { get; set; } = "/api/ai/chat";
+    public int ActiveMenuCount { get; set; }
+    public int ActiveToppingCount { get; set; }
 }
 
 public class AIChatResponse
@@ -579,6 +619,8 @@ public class AIChatResponse
     public string Reply { get; set; } = string.Empty;
     public List<SuggestedDrinkDto> SuggestedDrinks { get; set; } = new();
     public bool IsAiModelLive { get; set; }
+    public string ModelName { get; set; } = "MilkyVerse Dataset API v2";
+    public string? ApiError { get; set; }
 }
 
 // ==========================================

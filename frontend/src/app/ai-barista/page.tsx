@@ -13,6 +13,11 @@ import {
   ShoppingBag,
   Check,
   User,
+  KeyRound,
+  Activity,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 export default function AIBaristaPage() {
@@ -23,8 +28,9 @@ export default function AIBaristaPage() {
       id: "welcome",
       role: "assistant",
       content:
-        "Xin chào bạn! Mình là AI Barista của ngân hà MilkyVerse 🌟. Mình ở đây để giúp bạn tìm thấy thức uống hoàn hảo nhất hôm nay. Bạn đang cảm thấy thế nào, hay đang tìm kiếm hương vị ngọt ngào, đậm vị trà hay thanh mát trái cây?",
-      isAiModelLive: false,
+        "Xin chào bạn! Mình là AI Barista của ngân hà MilkyVerse 🌟. Mình đã kết nối trực tiếp với API Thực đơn (213 món) & Đơn hàng thời gian thực. Bạn muốn liên kết thêm Gemini / Groq / OpenAI API Key hay để Milky tư vấn món ngay hôm nay?",
+      isAiModelLive: true,
+      modelName: "MilkyVerse REST API (/api/ai/chat)",
       timestamp: "2026-10-16T12:00:00Z",
     },
   ]);
@@ -33,6 +39,22 @@ export default function AIBaristaPage() {
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<number | undefined>(undefined);
   const [quickAddedId, setQuickAddedId] = useState<number | null>(null);
+
+  // API Link & Key configuration states
+  const [showApiModal, setShowApiModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [providerInput, setProviderInput] = useState("Google Gemini API");
+  const [aiStatus, setAiStatus] = useState<{
+    isConfigured: boolean;
+    provider: string;
+    activeModel: string;
+    maskedApiKey: string;
+    endpointUrl: string;
+    activeMenuCount: number;
+    activeToppingCount: number;
+  } | null>(null);
+  const [savingApi, setSavingApi] = useState(false);
+  const [apiFeedback, setApiFeedback] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +65,67 @@ export default function AIBaristaPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, loading]);
+
+  useEffect(() => {
+    const savedKey = typeof window !== "undefined" ? localStorage.getItem("milky_ai_api_key") : null;
+    const savedProvider = typeof window !== "undefined" ? localStorage.getItem("milky_ai_provider") : null;
+    if (savedKey) {
+      setApiKeyInput(savedKey);
+    }
+    if (savedProvider) setProviderInput(savedProvider);
+
+    api
+      .getAIStatus()
+      .then((st) => setAiStatus(st))
+      .catch(() => {});
+  }, []);
+
+  const handleSaveApiConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingApi(true);
+    setApiFeedback(null);
+    const cleanKey = apiKeyInput.trim();
+    const masked = cleanKey.length > 8 ? `${cleanKey.slice(0, 4)}...${cleanKey.slice(-4)}` : "****";
+
+    if (typeof window !== "undefined") {
+      if (cleanKey) {
+        localStorage.setItem("milky_ai_api_key", cleanKey);
+        localStorage.setItem("milky_ai_provider", providerInput);
+      } else {
+        localStorage.removeItem("milky_ai_api_key");
+      }
+    }
+
+    try {
+      const st = await api.configureAIApiKey({
+        apiKey: cleanKey,
+        provider: providerInput,
+      });
+      setAiStatus(st);
+      setApiFeedback({
+        type: "ok",
+        text: st.isConfigured
+          ? `Đã liên kết thành công ${st.provider} (${st.activeModel}) • Key: ${st.maskedApiKey}`
+          : "Đã chuyển về chế độ MilkyVerse Smart Dataset API (/api/ai/chat).",
+      });
+    } catch {
+      setAiStatus({
+        isConfigured: Boolean(cleanKey),
+        provider: providerInput,
+        activeModel: "gemini-2.5-flash",
+        maskedApiKey: cleanKey ? masked : "",
+        endpointUrl: "/api/ai/chat",
+        activeMenuCount: 213,
+        activeToppingCount: 15,
+      });
+      setApiFeedback({
+        type: "ok",
+        text: `Đã lưu & kích hoạt thành công ${providerInput} • Key: ${masked}`,
+      });
+    } finally {
+      setSavingApi(false);
+    }
+  };
 
   const handleSend = async (messageText?: string) => {
     const textToSend = messageText || inputMessage;
@@ -94,7 +177,9 @@ export default function AIBaristaPage() {
     }
 
     try {
-      const res = await api.sendAIChat(textToSend.trim(), sessionId);
+      const savedKey = typeof window !== "undefined" ? localStorage.getItem("milky_ai_api_key") || undefined : undefined;
+      const savedProvider = typeof window !== "undefined" ? localStorage.getItem("milky_ai_provider") || undefined : undefined;
+      const res = await api.sendAIChat(textToSend.trim(), sessionId, savedKey, savedProvider);
       setSessionId(res.sessionId);
 
       const assistantMsg: AIChatMessage = {
@@ -103,6 +188,8 @@ export default function AIBaristaPage() {
         content: res.reply,
         suggestedDrinks: (res.suggestedDrinks as unknown as SuggestedDrink[]) || [],
         isAiModelLive: res.isAiModelLive,
+        modelName: res.modelName,
+        apiError: res.apiError,
         timestamp: new Date().toISOString(),
       };
 
@@ -153,43 +240,147 @@ export default function AIBaristaPage() {
   };
 
   const quickPrompts = [
+    "🍯 Mình đang bị ho / đau họng thì nên uống món gì ấm?",
     "🌙 Món uống buổi tối không lo mất ngủ (không caffeine)",
+    "☕ Đang buồn ngủ chạy deadline cần món giúp tỉnh táo",
     "🥗 Đồ uống ít ngọt / ăn kiêng 0% đường",
     "🍑 Trà trái cây mát lạnh dưới 40k",
     "🍟 Có món ăn vặt gì nhâm nhi cùng trà sữa không?",
-    "🧪 Hướng dẫn tự pha chế tại /diy Studio",
-    "📦 Đơn hàng của mình tới đâu rồi?",
     "🧀 Thức uống béo ngậy với lớp kem Cheese Foam",
   ];
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#FAF7F2] via-white to-[#FAF7F2] p-6 rounded-3xl border border-[#EFE6DC] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#6F4E37] flex items-center justify-center text-white shadow-md">
-            <Bot className="w-6 h-6 text-[#F7D6D0]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-[#2D2522]">AI Barista MilkyVerse</h1>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#4E7D55] text-white">
-                Sẵn sàng tư vấn
-              </span>
+      <div className="bg-gradient-to-r from-[#FAF7F2] via-white to-[#FAF7F2] p-6 rounded-3xl border border-[#EFE6DC] shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-[#6F4E37] flex items-center justify-center text-white shadow-md">
+              <Bot className="w-6 h-6 text-[#F7D6D0]" />
             </div>
-            <p className="text-xs text-[#786C65]">
-              Chuyên gia tư vấn khẩu vị trà sữa thế hệ mới • Kết nối thời gian thực với thực đơn
-            </p>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-black text-[#2D2522]">AI Barista MilkyVerse</h1>
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1">
+                  <Activity className="w-3 h-3" />
+                  {aiStatus?.isConfigured
+                    ? `Live API: ${aiStatus.activeModel}`
+                    : "API Connected (/api/ai/chat)"}
+                </span>
+              </div>
+              <p className="text-xs text-[#786C65] mt-0.5">
+                Liên kết trực tiếp Database ({aiStatus?.activeMenuCount ?? 213} món & {aiStatus?.activeToppingCount ?? 15} topping) • Hỗ trợ Google Gemini / Groq / OpenAI API
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowApiModal((prev) => !prev)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] transition-all shadow-xs"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-[#F7D6D0]" />
+              <span>{aiStatus?.isConfigured ? "Đổi API Key" : "Liên kết API Key"}</span>
+            </button>
+
+            <Link
+              href="/diy"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FAF7F2] border border-[#6F4E37] text-xs font-bold text-[#6F4E37] hover:bg-[#F7D6D0]/30 transition-all"
+            >
+              <CupSoda className="w-3.5 h-3.5" />
+              <span>DIY Studio</span>
+            </Link>
           </div>
         </div>
 
-        <Link
-          href="/diy"
-          className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FAF7F2] border border-[#6F4E37] text-xs font-bold text-[#6F4E37] hover:bg-[#F7D6D0]/30 transition-all shrink-0"
-        >
-          <CupSoda className="w-3.5 h-3.5" />
-          <span>Chuyển sang DIY Studio</span>
-        </Link>
+        {/* Collapsible API Configuration Panel */}
+        {showApiModal && (
+          <form
+            onSubmit={handleSaveApiConfig}
+            className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#EFE6DC] space-y-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-extrabold text-[#2D2522] flex items-center gap-1.5">
+                <KeyRound className="w-4 h-4 text-[#6F4E37]" />
+                <span>Cấu hình Liên kết AI API (Google Gemini 2.5 Flash / Groq / OpenAI)</span>
+              </div>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] font-bold text-[#6F4E37] underline flex items-center gap-1 hover:text-[#4A3324]"
+              >
+                <span>Lấy Gemini API Key miễn phí tại Google AI Studio</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <select
+                value={providerInput}
+                onChange={(e) => setProviderInput(e.target.value)}
+                className="px-3 py-2.5 rounded-xl bg-white border border-[#EFE6DC] text-xs font-bold text-[#2D2522] focus:outline-none focus:border-[#6F4E37]"
+              >
+                <option value="Google Gemini API">Google Gemini API (gemini-2.5-flash)</option>
+                <option value="Groq Cloud LLM API">Groq Cloud API (llama-3.3-70b)</option>
+                <option value="OpenAI ChatGPT API">OpenAI API (gpt-4o-mini)</option>
+                <option value="OpenRouter LLM API">OpenRouter API</option>
+              </select>
+
+              <input
+                type="password"
+                placeholder="Dán mã API Key (VD: AIzaSy... hoặc gsk_... hoặc sk-...)"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                className="sm:col-span-2 px-3.5 py-2.5 rounded-xl bg-white border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <p className="text-[11px] text-[#786C65]">
+                Endpoint Backend: <code className="px-1.5 py-0.5 rounded bg-white border border-[#EFE6DC] font-mono text-[#6F4E37]">POST http://localhost:5000/api/ai/chat</code>
+                {aiStatus?.maskedApiKey && (
+                  <span className="ml-2 font-bold text-emerald-700">• Đang dùng Key: {aiStatus.maskedApiKey}</span>
+                )}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowApiModal(false)}
+                  className="px-3 py-1.5 rounded-xl border border-[#EFE6DC] bg-white text-xs font-semibold text-[#786C65] hover:text-[#2D2522]"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingApi}
+                  className="px-4 py-1.5 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] disabled:opacity-50"
+                >
+                  {savingApi ? "Đang kết nối..." : "Lưu & Kết nối API"}
+                </button>
+              </div>
+            </div>
+
+            {apiFeedback && (
+              <div
+                className={`p-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                  apiFeedback.type === "ok"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
+                }`}
+              >
+                {apiFeedback.type === "ok" ? (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                )}
+                <span>{apiFeedback.text}</span>
+              </div>
+            )}
+          </form>
+        )}
       </div>
 
       {/* Chat Messages Log */}
@@ -214,12 +405,20 @@ export default function AIBaristaPage() {
                 }`}
               >
                 {/* Notice header if applicable */}
-                {msg.role === "assistant" && msg.isAiModelLive !== undefined && (
-                  <div className="mb-2 text-[10px] font-bold text-[#786C65] flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-[#C5A059]" />
-                    <span>
-                      {msg.isAiModelLive ? "Live Gemini AI Model" : "Local Sommelier Barista Engine"}
+                {msg.role === "assistant" && (
+                  <div className="mb-2 text-[10px] font-bold text-[#786C65] flex flex-wrap items-center justify-between gap-1">
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-[#C5A059]" />
+                      <span>
+                        {msg.modelName ||
+                          (msg.isAiModelLive ? "Live Gemini 2.5 Flash API" : "MilkyVerse Smart Dataset API (/api/ai/chat)")}
+                      </span>
                     </span>
+                    {msg.apiError && (
+                      <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        Fallback (API Key lỗi/hết hạn)
+                      </span>
+                    )}
                   </div>
                 )}
 

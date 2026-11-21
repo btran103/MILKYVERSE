@@ -197,7 +197,7 @@ public class OrderService : IOrderService
                 ShippingFee = shippingFee,
                 TotalAmount = totalAmount,
                 Status = "Pending",
-                PaymentStatus = (request.PaymentMethod == "VIETQR" || request.PaymentMethod == "VNPAY") ? "Paid" : "Pending",
+                PaymentStatus = "Pending",
                 PaymentMethod = request.PaymentMethod ?? "COD",
                 CustomerName = request.CustomerName.Trim(),
                 CustomerPhone = request.CustomerPhone.Trim(),

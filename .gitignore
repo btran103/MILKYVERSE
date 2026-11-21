@@ -10,10 +10,14 @@
 **/.next/
 **/out/
 
-# Environment files
+# Environment & Local Secret files (Chặn không push API Key & Mật khẩu lên GitHub)
 .env
 .env.*
 !.env.example
+**/appsettings.Local.json
+**/appsettings.Development.local.json
+**/*.db-shm
+**/*.db-wal
 
 # IDE
 .vscode/
