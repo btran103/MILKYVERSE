@@ -34,31 +34,44 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMsg, setAuthModalMsg] = useState<string | undefined>(undefined);
 
+  // User-scoped cart key so each user has isolated cart, and guest sessions don't leak into logged-in accounts
+  const cartStorageKey = user ? `milky_cart_user_${user.id}` : "milky_cart_guest";
+
   useEffect(() => {
-    const saved = localStorage.getItem("milky_cart");
-    if (saved) {
-      try {
+    // Clean up legacy shared key if present
+    localStorage.removeItem("milky_cart");
+
+    try {
+      const saved = localStorage.getItem(cartStorageKey);
+      if (saved) {
         setItems(JSON.parse(saved));
-      } catch {
+      } else {
         setItems([]);
       }
+    } catch {
+      setItems([]);
     }
     setIsLoaded(true);
-  }, []);
+  }, [cartStorageKey]);
 
   useEffect(() => {
     if (isLoaded) {
-      localStorage.setItem("milky_cart", JSON.stringify(items));
+      if (items.length > 0) {
+        localStorage.setItem(cartStorageKey, JSON.stringify(items));
+      } else {
+        localStorage.removeItem(cartStorageKey);
+      }
     }
-  }, [items, isLoaded]);
+  }, [items, isLoaded, cartStorageKey]);
 
   // Tài khoản Shipper, Thủ kho, Quản lý/Admin không được giữ giỏ hàng đặt món
   useEffect(() => {
     if (user && user.role !== "Customer" && user.role !== "Staff") {
       setItems([]);
+      localStorage.removeItem(cartStorageKey);
       localStorage.removeItem("milky_cart");
     }
-  }, [user]);
+  }, [user, cartStorageKey]);
 
   const openAuthModal = (msg?: string) => {
     setAuthModalMsg(msg);
@@ -135,7 +148,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearCart = () => {
     setItems([]);
+    localStorage.removeItem(cartStorageKey);
     localStorage.removeItem("milky_cart");
+    localStorage.removeItem("milky_cart_guest");
   };
 
   const cartCount = items.reduce((acc, i) => acc + i.quantity, 0);

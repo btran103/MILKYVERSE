@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { OrderResponse } from "@/types";
 import confetti from "canvas-confetti";
 import {
   CreditCard,
@@ -16,31 +17,32 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
-  QrCode,
-  Smartphone,
   Clock,
   ShieldCheck,
   Ticket,
-  RefreshCw,
   Crown,
   Home,
   Building2,
-  GraduationCap,
   MapPin,
+  CheckCircle2,
+  Copy,
+  QrCode,
+  ExternalLink,
 } from "lucide-react";
 import { getSavedAddresses, SavedAddress } from "@/lib/addresses";
 import { getLoyaltyOverview, saveLoyaltyPoints } from "@/lib/loyalty";
+import { SePayQrResponse } from "@/types";
 
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, subtotal, clearCart } = useCart();
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
 
   const [name, setName] = useState(user?.fullName || "");
   const [phone, setPhone] = useState(user?.phoneNumber || "");
   const [address, setAddress] = useState(user?.address || "");
   const [note, setNote] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("VIETQR");
+  const [paymentMethod, setPaymentMethod] = useState("SEPAY");
   const [promoCode, setPromoCode] = useState<string>("");
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [promoMsg, setPromoMsg] = useState<{ text: string; error?: boolean } | null>(null);
@@ -51,18 +53,54 @@ export default function CheckoutPage() {
   const [loyaltyPoints, setLoyaltyPoints] = useState<number>(0);
   const [usePoints, setUsePoints] = useState<boolean>(false);
 
-  const [timeLeft, setTimeLeft] = useState(120); // 2 minutes transfer timer
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // 2-minute countdown for online transfer (VIETQR or MOMO/ZaloPay)
+  // SePay Payment Modal State
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState<OrderResponse | null>(null);
+  const [sePaySession, setSePaySession] = useState<SePayQrResponse | null>(null);
+  const [qrCountdown, setQrCountdown] = useState(900); // 15 phút
+  const [modalSuccess, setModalSuccess] = useState(false);
+  const [copiedContent, setCopiedContent] = useState(false);
+
+  // Modal Countdown Timer (15:00 -> 00:00)
   useEffect(() => {
-    if (paymentMethod === "COD") return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    if (!showQrModal || modalSuccess) return;
+    const t = setInterval(() => {
+      setQrCountdown((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
-    return () => clearInterval(interval);
-  }, [paymentMethod]);
+    return () => clearInterval(t);
+  }, [showQrModal, modalSuccess]);
+
+  // Real-time Polling every 2s while Modal is open: Tự động phát hiện khi SePay ghi nhận tiền thật vào TPBank
+  useEffect(() => {
+    if (!showQrModal || !createdOrder || modalSuccess) return;
+    const poll = setInterval(async () => {
+      try {
+        const ord = await api.getOrderById(createdOrder.id);
+        if (
+          ord.paymentStatus === "Paid" ||
+          ord.paymentStatus === "Success" ||
+          ord.status === "Confirmed"
+        ) {
+          setModalSuccess(true);
+          clearCart();
+          sessionStorage.removeItem("milky_promo_code");
+          confetti({
+            particleCount: 160,
+            spread: 90,
+            origin: { y: 0.6 },
+            colors: ["#2563EB", "#059669", "#6F4E37", "#F7D6D0"],
+          });
+          setTimeout(() => {
+            router.push(`/orders/payment-success?orderId=${createdOrder.id}`);
+          }, 1800);
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(poll);
+  }, [showQrModal, createdOrder, modalSuccess, clearCart, router]);
 
   const handleApplyPromoCode = async (codeToApply: string) => {
     if (!codeToApply.trim()) return;
@@ -83,6 +121,8 @@ export default function CheckoutPage() {
   };
 
   useEffect(() => {
+    if (isLoading) return;
+
     if (!user) {
       router.push("/auth/login?redirect=/checkout");
       return;
@@ -112,7 +152,25 @@ export default function CheckoutPage() {
       setPromoCode(savedPromo);
       handleApplyPromoCode(savedPromo);
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-28 text-center space-y-4">
+        <div className="w-12 h-12 border-4 border-[#6F4E37] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs font-bold text-[#786C65]">Đang xác thực thông tin đăng nhập...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-28 text-center space-y-4">
+        <div className="w-12 h-12 border-4 border-[#6F4E37] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs font-bold text-[#786C65]">Đang chuyển hướng đến trang đăng nhập...</p>
+      </div>
+    );
+  }
 
   // Nếu người dùng có vai trò không được đặt món (Shipper, Thủ kho, Quản lý/Admin)
   if (user && user.role !== "Customer" && user.role !== "Staff") {
@@ -162,16 +220,6 @@ export default function CheckoutPage() {
   const pointsDiscount = usePoints ? maxPointsCanUse * 1000 : 0;
   const shippingFee = subtotal >= 200000 || (discountAmount + pointsDiscount) >= subtotal ? 0 : 15000;
   const finalTotal = Math.max(0, subtotal - discountAmount - pointsDiscount + shippingFee);
-
-  const formatTimer = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
-
-  const vietQrUrl = `https://img.vietqr.io/image/MB-0358899888-compact.png?amount=${finalTotal}&addInfo=MILKYVERSE%20${encodeURIComponent(
-    phone || "KHACH"
-  )}&accountName=MILKYVERSE%20STORE`;
 
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -226,19 +274,50 @@ export default function CheckoutPage() {
         saveLoyaltyPoints(user.id, Math.max(0, loyaltyPoints - ptsUsed + ptsEarned));
       }
 
-      // Celebrate with confetti!
+      // SePay (VietQR / TPBank): Tạo mã VietQR TPBank chuẩn SePay với thời hạn 15 phút, hiện Modal đè lên trang checkout
+      if (paymentMethod === "SEPAY") {
+        const accountNumber = "00000107071";
+        const bank = "TPBank";
+        const accountName = "HA BAO TRAN";
+        const description = `MILKY ${orderRes.orderCode}`;
+        const qrUrl = `https://qr.sepay.vn/img?acc=${encodeURIComponent(accountNumber)}&bank=${encodeURIComponent(bank)}&amount=${Math.round(orderRes.totalAmount)}&des=${encodeURIComponent(description)}&template=compact`;
+
+        let session: SePayQrResponse = {
+          orderId: orderRes.id,
+          orderCode: orderRes.orderCode,
+          amount: orderRes.totalAmount,
+          description,
+          bank,
+          accountNumber,
+          accountName,
+          qrUrl,
+          paymentStatus: "Pending",
+          expiredSeconds: 900,
+        };
+
+        try {
+          const apiSession = await api.getSePayQr(orderRes.id);
+          if (apiSession) session = apiSession;
+        } catch (e) {
+          console.warn("Lấy QR từ backend thất bại, dùng fallback trực tiếp:", e);
+        }
+
+        setCreatedOrder(orderRes);
+        setSePaySession(session);
+        setQrCountdown(session.expiredSeconds || 900);
+        setShowQrModal(true);
+        return;
+      }
+
+      // COD payment: Xác nhận đơn ngay với tiền mặt khi nhận hàng
       confetti({
         particleCount: 120,
         spread: 70,
         origin: { y: 0.6 },
         colors: ["#6F4E37", "#F7D6D0", "#C5A059", "#4E7D55"],
       });
-
-      // Clear cart
       clearCart();
       sessionStorage.removeItem("milky_promo_code");
-
-      // Redirect to order details
       router.push(`/orders/${orderRes.id}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Đã xảy ra lỗi khi tạo đơn hàng.";
@@ -421,24 +500,24 @@ export default function CheckoutPage() {
               <span>2. Phương Thức Thanh Toán</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setPaymentMethod("VIETQR")}
+                onClick={() => setPaymentMethod("SEPAY")}
                 className={`p-4 rounded-2xl border text-left transition-all flex flex-col gap-2 ${
-                  paymentMethod === "VIETQR"
-                    ? "border-[#6F4E37] bg-[#F7D6D0]/30 shadow-sm ring-1 ring-[#6F4E37]"
+                  paymentMethod === "SEPAY"
+                    ? "border-[#2563EB] bg-blue-50/50 shadow-sm ring-2 ring-[#2563EB]"
                     : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <QrCode className="w-5 h-5 text-[#6F4E37] shrink-0" />
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#4E7D55] text-white">Khuyên dùng</span>
+                  <QrCode className="w-5 h-5 text-[#2563EB] shrink-0" />
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#2563EB] text-white">Khuyên dùng • Tiền thật TPBank</span>
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-[#2D2522]">Chuyển khoản VietQR</h4>
+                  <h4 className="font-bold text-xs text-[#2D2522]">Thanh toán SePay (VietQR TPBank)</h4>
                   <p className="text-[10px] text-[#786C65] mt-0.5">
-                    Quét mã Napas247 tự động điền số tiền từ mọi app ngân hàng.
+                    Quét mã VietQR bằng mọi app ngân hàng. Tiền thật vào thẳng tài khoản TPBank, SePay tự động nổ đơn ngay lập tức!
                   </p>
                 </div>
               </button>
@@ -454,88 +533,50 @@ export default function CheckoutPage() {
               >
                 <Banknote className="w-5 h-5 text-[#6F4E37] shrink-0" />
                 <div>
-                  <h4 className="font-bold text-xs text-[#2D2522]">Tiền mặt (COD)</h4>
+                  <h4 className="font-bold text-xs text-[#2D2522]">Tiền mặt khi nhận hàng (COD)</h4>
                   <p className="text-[10px] text-[#786C65] mt-0.5">
                     Thanh toán trực tiếp cho shipper khi nhận trà sữa.
                   </p>
                 </div>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("MOMO")}
-                className={`p-4 rounded-2xl border text-left transition-all flex flex-col gap-2 ${
-                  paymentMethod === "MOMO"
-                    ? "border-[#6F4E37] bg-[#F7D6D0]/30 shadow-sm ring-1 ring-[#6F4E37]"
-                    : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
-                }`}
-              >
-                <Smartphone className="w-5 h-5 text-[#0068FF] shrink-0" />
-                <div>
-                  <h4 className="font-bold text-xs text-[#2D2522]">ZaloPay / Ví Đa Năng</h4>
-                  <p className="text-[10px] text-[#786C65] mt-0.5">
-                    QR nhận tiền từ ZaloPay, MoMo &amp; 50+ ứng dụng ngân hàng.
-                  </p>
-                </div>
-              </button>
             </div>
 
-            {(paymentMethod === "VIETQR" || paymentMethod === "MOMO") && (
+            {paymentMethod === "MOMO" && (
               <div className="p-4 rounded-3xl bg-[#FAF7F2] border border-[#EFE6DC] space-y-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[#6F4E37] font-bold">
-                    <Sparkles className="w-4 h-4 text-[#C5A059]" />
-                    <span>
-                      {paymentMethod === "VIETQR"
-                        ? "Mã QR TPBank VietQR Chính Chủ (Xác thực Ngrok):"
-                        : "Mã QR ZaloPay / Đa Ngân Hàng Chính Chủ (Xác thực Ngrok):"}
-                    </span>
+                  <div className="flex items-center gap-2 text-[#A50064] font-bold">
+                    <Sparkles className="w-4 h-4 text-[#A50064]" />
+                    <span>Thanh Toán Trực Tuyến MoMo (Phiên hiệu lực 02:00):</span>
                   </div>
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 font-mono font-bold text-xs border border-red-200">
                     <Clock className="w-3.5 h-3.5" />
-                    <span>{formatTimer(timeLeft)}</span>
-                    <button
-                      type="button"
-                      onClick={() => setTimeLeft(120)}
-                      title="Làm mới thời gian"
-                      className="ml-1 p-0.5 hover:opacity-70"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                    </button>
+                    <span>02:00</span>
                   </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-2xl border border-[#EFE6DC]">
-                  <div className="w-48 h-56 bg-white p-1.5 rounded-2xl border-2 border-[#6F4E37]/30 shrink-0 shadow-sm flex items-center justify-center overflow-hidden">
+                  <div className="w-24 h-24 bg-white p-1 rounded-2xl border border-[#A50064]/30 shrink-0 flex items-center justify-center overflow-hidden shadow-xs">
                     <img
-                      src={paymentMethod === "VIETQR" ? "/images/qr-tpbank.png" : "/images/qr-zalopay.png"}
-                      alt={paymentMethod === "VIETQR" ? "TPBank VietQR HA BAO TRAN" : "ZaloPay QR HA BAO TRAN"}
-                      className="w-full h-full object-contain rounded-xl"
+                      src="/images/qr-momo.jpg"
+                      alt="Mã QR MoMo Hà Bảo Trân"
+                      className="w-full h-full object-cover rounded-xl"
                     />
                   </div>
 
-                  <div className="space-y-2 text-[11px] w-full">
+                  <div className="space-y-1.5 text-[11px] w-full">
                     <div>
-                      <span className="text-[#786C65] block text-[10px]">
-                        {paymentMethod === "VIETQR" ? "Ngân hàng thụ hưởng:" : "Cổng thanh toán:"}
-                      </span>
+                      <span className="text-[#786C65] block text-[10px]">Cổng thanh toán tích hợp:</span>
                       <strong className="text-[#2D2522]">
-                        {paymentMethod === "VIETQR"
-                          ? "TPBank (Ngân Hàng Tiên Phong - VietQR Napas247)"
-                          : "ZaloPay / VietQR Đa Năng (Hỗ trợ 50+ Ngân hàng & Ví)"}
+                        MoMo Payment Gateway (Chữ ký HMAC SHA256 &amp; IPN Webhook Real-Time)
                       </strong>
                     </div>
                     <div>
-                      <span className="text-[#786C65] block text-[10px]">Số tài khoản nhận:</span>
-                      <strong className="text-[#6F4E37] font-mono text-sm tracking-wider">0000 0107 071</strong>
+                      <span className="text-[#786C65] block text-[10px]">Thời gian hiệu lực bắt buộc:</span>
+                      <strong className="text-red-600 font-mono text-xs">02:00 (120 giây kể từ lúc tạo phiên trên Backend)</strong>
                     </div>
                     <div>
-                      <span className="text-[#786C65] block text-[10px]">Chủ tài khoản xác thực:</span>
-                      <strong className="text-[#2D2522] text-sm">HA BAO TRAN</strong>
-                    </div>
-                    <div>
-                      <span className="text-[#786C65] block text-[10px]">Số tiền cần thanh toán:</span>
-                      <strong className="text-base font-black text-[#6F4E37]">
+                      <span className="text-[#786C65] block text-[10px]">Số tiền thanh toán:</span>
+                      <strong className="text-base font-black text-[#A50064]">
                         {finalTotal.toLocaleString("vi-VN")}đ
                       </strong>
                     </div>
@@ -543,7 +584,7 @@ export default function CheckoutPage() {
                 </div>
 
                 <p className="text-[10px] text-[#786C65] italic leading-tight">
-                  * Sau khi bấm <strong>Xác Nhận Đặt Hàng</strong>, hệ thống sẽ chuyển sang cổng <strong>Đếm Ngược Xác Thực Quyền Thanh Toán Online qua Ngrok Webhook</strong>.
+                  * Sau khi bấm <strong>Xác Nhận Đặt Hàng</strong>, hệ thống Backend sẽ khởi tạo phiên giao dịch MoMo duy nhất (`OrderId` & `RequestId`), lưu `PaymentExpiresAt` (120 giây) vào Database và bắt đầu đếm ngược thời gian thực `02:00`.
                 </p>
               </div>
             )}
@@ -583,7 +624,7 @@ export default function CheckoutPage() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="MILKYNEW, #MK2095F54..."
+                  placeholder="Nhập mã ưu đãi của bạn..."
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                   className="flex-1 px-3 py-2 text-xs uppercase font-bold rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] focus:outline-none focus:border-[#6F4E37]"
@@ -594,32 +635,6 @@ export default function CheckoutPage() {
                   className="px-3.5 py-2 bg-[#6F4E37] text-white text-xs font-bold rounded-xl hover:bg-[#4A3324] transition-colors"
                 >
                   Áp dụng
-                </button>
-              </div>
-
-              {/* Quick voucher chips */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPromoCode("#MK2095F54");
-                    handleApplyPromoCode("#MK2095F54");
-                  }}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#FAF7F2] border border-[#EFE6DC] text-[#6F4E37] hover:border-[#6F4E37]"
-                >
-                  #MK2095F54 (-25k)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const hex = Math.floor(1000000 + Math.random() * 9000000).toString(16).toUpperCase();
-                    const newCode = `#MK${hex}`;
-                    setPromoCode(newCode);
-                    handleApplyPromoCode(newCode);
-                  }}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100"
-                >
-                  🎲 Tạo mã may mắn
                 </button>
               </div>
 
@@ -706,23 +721,164 @@ export default function CheckoutPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 rounded-2xl bg-[#6F4E37] text-white font-bold text-sm hover:bg-[#4A3324] shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-4 rounded-2xl bg-[#6F4E37] text-white font-bold text-sm hover:bg-[#4A3324] shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer active:scale-98"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Đang xử lý đơn hàng...</span>
                 </>
+              ) : paymentMethod === "SEPAY" ? (
+                <>
+                  <QrCode className="w-4 h-4" />
+                  <span>Thanh Toán Qua SePay (VietQR TPBank) — {finalTotal.toLocaleString("vi-VN")}đ</span>
+                </>
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Xác Nhận Đặt Hàng</span>
+                  <span>Xác Nhận Đặt Hàng (Tiền Mặt COD)</span>
                 </>
               )}
             </button>
           </div>
         </div>
       </form>
+
+      {/* Modal Popup: Thanh Toán SePay VietQR Nhận Tiền Thật TPBank */}
+      {showQrModal && createdOrder && sePaySession && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-[#EFE6DC] space-y-4 text-center relative animate-in zoom-in-95 duration-200 my-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[#FAF7F2]">
+              <div className="flex items-center gap-2 text-left">
+                <div className="w-8 h-8 rounded-xl bg-[#2563EB] text-white flex items-center justify-center font-black text-xs shadow-xs">
+                  S
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-[#2D2522] text-sm">
+                    Thanh Toán SePay • VietQR TPBank
+                  </h3>
+                  <p className="text-[11px] text-[#786C65]">Mã đơn: #{createdOrder.orderCode}</p>
+                </div>
+              </div>
+
+              {/* Countdown Pill (15 phút) */}
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-mono font-bold text-xs border border-blue-200">
+                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                <span>
+                  {Math.floor(qrCountdown / 60).toString().padStart(2, "0")}:
+                  {(qrCountdown % 60).toString().padStart(2, "0")}
+                </span>
+              </div>
+            </div>
+
+            {modalSuccess ? (
+              <div className="py-6 space-y-3 animate-in zoom-in-95 duration-200">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border-2 border-emerald-200">
+                  <CheckCircle2 className="w-10 h-10 animate-bounce" />
+                </div>
+                <h4 className="text-lg font-black text-emerald-700">
+                  ĐÃ NHẬN TIỀN THẬT THÀNH CÔNG VÀO TPBANK!
+                </h4>
+                <p className="text-xs text-[#786C65] font-semibold">
+                  SePay đã xác nhận thanh toán &amp; đơn hàng <strong>#{createdOrder.orderCode}</strong> thành công!
+                </p>
+                <p className="text-[11px] text-[#4E7D55] italic">
+                  Đang chuyển bạn đến biên lai thanh toán...
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Banner trạng thái: Chờ thanh toán */}
+                <div className="p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs text-left space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Trạng thái: CHỜ CHUYỂN KHOẢN (Hiệu lực 15 phút)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 leading-normal">
+                    Quét mã VietQR bằng app ngân hàng của bạn. Tiền vào TPBank là SePay <strong>tự động duyệt đơn ngay lập tức</strong>!
+                  </p>
+                </div>
+
+                {/* Tấm ảnh mã VietQR TPBank chuẩn SePay */}
+                <div className="space-y-1.5">
+                  <div className="relative mx-auto max-w-[220px] bg-white p-2 rounded-2xl border-2 border-[#2563EB] shadow-md">
+                    <img
+                      src={sePaySession.qrUrl}
+                      alt="Mã VietQR SePay TPBank"
+                      className="w-full h-auto object-contain rounded-xl"
+                    />
+                  </div>
+                  <p className="text-[11px] font-bold text-[#2563EB] flex items-center justify-center gap-1">
+                    <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                    <span>TPBank • {sePaySession.accountName}</span>
+                  </p>
+                </div>
+
+                {/* Thông tin chuyển khoản */}
+                <div className="bg-[#FAF7F2] p-3 rounded-2xl border border-[#EFE6DC] text-left text-xs space-y-2">
+                  <div className="flex justify-between items-center text-[#786C65]">
+                    <span>Số tài khoản TPBank:</span>
+                    <strong className="font-mono font-bold text-[#2D2522]">
+                      {sePaySession.accountNumber}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between items-center text-[#786C65]">
+                    <span>Số tiền cần chuyển:</span>
+                    <strong className="text-base font-black text-emerald-700">
+                      {sePaySession.amount.toLocaleString("vi-VN")}đ
+                    </strong>
+                  </div>
+                  <div className="flex justify-between items-center text-[#786C65]">
+                    <span>Nội dung chuyển khoản:</span>
+                    <div className="flex items-center gap-1.5">
+                      <strong className="font-mono font-bold text-[#2D2522] bg-white px-2 py-0.5 rounded border border-[#EFE6DC]">
+                        {sePaySession.description}
+                      </strong>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(sePaySession.description);
+                          setCopiedContent(true);
+                          setTimeout(() => setCopiedContent(false), 2000);
+                        }}
+                        className="p-1 rounded hover:bg-white text-[#786C65]"
+                        title="Sao chép nội dung"
+                      >
+                        {copiedContent ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Radar Tự Động Lắng Nghe Tiền Về Thời Gian Thực */}
+                <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-center gap-2.5 font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping shrink-0" />
+                  <span>Đang tự động lắng nghe giao dịch TPBank qua SePay...</span>
+                </div>
+
+                <p className="text-[11px] text-[#786C65] leading-relaxed">
+                  💡 Bạn chỉ cần quét mã và chuyển khoản. Sau khi tiền vào tài khoản TPBank, Webhook của SePay sẽ <strong>TỰ ĐỘNG XÁC NHẬN ĐƠN HÀNG</strong> ngay lập tức!
+                </p>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowQrModal(false)}
+                    className="w-full py-2 text-xs text-[#786C65] hover:text-red-600 transition-colors cursor-pointer"
+                  >
+                    ✕ Hủy giao dịch (Quay lại giỏ hàng)
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

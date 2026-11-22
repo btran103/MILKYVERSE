@@ -381,8 +381,13 @@ public class OrderResponse
     public string? CancelReason { get; set; }
     public bool CanCancel { get; set; } = false;
     public DateTime CreatedAt { get; set; }
+    public DateTime? PaymentExpiresAt { get; set; }
+    public DateTime? PaidAt { get; set; }
+    public int RemainingPaymentSeconds { get; set; }
+    public DateTime ServerTimeUtc { get; set; } = DateTime.UtcNow;
     public List<OrderDetailResponse> Items { get; set; } = new();
     public List<OrderStatusHistoryDto> StatusHistories { get; set; } = new();
+    public List<PaymentTransactionDto> PaymentTransactions { get; set; } = new();
 
     // Delivery info
     public int? ShipperId { get; set; }
@@ -392,6 +397,53 @@ public class OrderResponse
     public decimal CodAmount { get; set; } = 0;
     public bool IsCodCollected { get; set; } = false;
     public bool CodReconciled { get; set; } = false;
+}
+
+public class PaymentTransactionDto
+{
+    public int Id { get; set; }
+    public int OrderId { get; set; }
+    public string OrderCode { get; set; } = string.Empty;
+    public string MomoOrderId { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public string TransactionId { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = "MOMO";
+    public decimal Amount { get; set; }
+    public string PaymentStatus { get; set; } = "Pending"; // Pending, Success, Failed, Cancelled, Expired, Refunded
+    public string PayUrl { get; set; } = string.Empty;
+    public string QrCodeUrl { get; set; } = string.Empty;
+    public string Deeplink { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime PaymentExpiresAt { get; set; }
+    public DateTime? PaidAt { get; set; }
+    public int RemainingSeconds { get; set; }
+    public DateTime ServerTimeUtc { get; set; } = DateTime.UtcNow;
+    public bool IsExpired { get; set; }
+    public string Message { get; set; } = string.Empty;
+}
+
+public class CreateMomoPaymentRequest
+{
+    public int OrderId { get; set; }
+    public string? ReturnUrl { get; set; }
+    public bool ForceNewSession { get; set; } = false;
+}
+
+public class MomoIpnCallbackRequest
+{
+    public string PartnerCode { get; set; } = string.Empty;
+    public string OrderId { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public long Amount { get; set; }
+    public string OrderInfo { get; set; } = string.Empty;
+    public string OrderType { get; set; } = string.Empty;
+    public long TransId { get; set; }
+    public int ResultCode { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public string PayType { get; set; } = string.Empty;
+    public long ResponseTime { get; set; }
+    public string ExtraData { get; set; } = string.Empty;
+    public string Signature { get; set; } = string.Empty;
 }
 
 public class CancelOrderRequest

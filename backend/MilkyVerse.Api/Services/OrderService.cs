@@ -187,6 +187,11 @@ public class OrderService : IOrderService
             decimal totalAmount = Math.Max(0, subtotal - discount + shippingFee);
 
             var orderCode = "MV" + DateTime.UtcNow.ToString("yyyyMMdd") + Guid.NewGuid().ToString("N")[..6].ToUpper();
+            var nowUtc = DateTime.UtcNow;
+            var paymentMethodNormalized = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "COD" : request.PaymentMethod.Trim().ToUpper();
+            DateTime? paymentExpiresAt = paymentMethodNormalized == "SEPAY"
+                ? nowUtc.AddMinutes(15)
+                : (paymentMethodNormalized != "COD" ? nowUtc.AddSeconds(120) : null);
 
             var order = new Order
             {
@@ -198,12 +203,13 @@ public class OrderService : IOrderService
                 TotalAmount = totalAmount,
                 Status = "Pending",
                 PaymentStatus = "Pending",
-                PaymentMethod = request.PaymentMethod ?? "COD",
+                PaymentMethod = paymentMethodNormalized,
+                PaymentExpiresAt = paymentExpiresAt,
                 CustomerName = request.CustomerName.Trim(),
                 CustomerPhone = request.CustomerPhone.Trim(),
                 ShippingAddress = request.ShippingAddress.Trim(),
                 Note = request.Note ?? string.Empty,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = nowUtc,
                 OrderDetails = orderDetailsToCreate
             };
 
@@ -215,8 +221,10 @@ public class OrderService : IOrderService
             {
                 OrderId = order.Id,
                 Status = "Pending",
-                Note = "Đơn hàng mới được tạo thành công.",
-                CreatedAt = DateTime.UtcNow
+                Note = paymentExpiresAt.HasValue
+                    ? $"Đơn hàng mới được tạo thành công ({paymentMethodNormalized}). Thời hạn thanh toán 02:00 (hết hạn lúc {paymentExpiresAt.Value:HH:mm:ss} UTC)."
+                    : "Đơn hàng mới được tạo thành công.",
+                CreatedAt = nowUtc
             });
 
             // Auto deduct inventory for recipes
@@ -278,6 +286,7 @@ public class OrderService : IOrderService
             .Include(o => o.DeliveryAssignment)
                 .ThenInclude(da => da!.Shipper)
             .Include(o => o.StatusHistories)
+            .Include(o => o.PaymentTransactions)
             .AsQueryable();
 
         if (userId.HasValue && userId.Value > 0)
@@ -303,6 +312,7 @@ public class OrderService : IOrderService
             .Include(o => o.DeliveryAssignment)
                 .ThenInclude(da => da!.Shipper)
             .Include(o => o.StatusHistories)
+            .Include(o => o.PaymentTransactions)
             .AsQueryable();
 
         if (userId.HasValue && userId.Value > 0)
@@ -314,6 +324,25 @@ public class OrderService : IOrderService
         if (order == null)
         {
             return ApiResponse<OrderResponse>.Fail("Không tìm thấy đơn hàng.");
+        }
+
+        // Auto-expire online payment session if 120 seconds have elapsed while still Pending
+        var now = DateTime.UtcNow;
+        bool changed = false;
+        if (order.PaymentMethod != "COD" && order.PaymentStatus == "Pending" && order.PaymentExpiresAt.HasValue && now >= order.PaymentExpiresAt.Value)
+        {
+            order.PaymentStatus = "Expired";
+            order.UpdatedAt = now;
+            changed = true;
+        }
+        foreach (var pt in order.PaymentTransactions.Where(t => t.PaymentStatus == "Pending" && now >= t.PaymentExpiresAt))
+        {
+            pt.PaymentStatus = "Expired";
+            changed = true;
+        }
+        if (changed)
+        {
+            await _context.SaveChangesAsync();
         }
 
         return ApiResponse<OrderResponse>.Ok(MapToOrderResponse(order));
@@ -505,8 +534,28 @@ public class OrderService : IOrderService
 
     private static OrderResponse MapToOrderResponse(Order o)
     {
-        var elapsedMinutes = (DateTime.UtcNow - o.CreatedAt).TotalMinutes;
+        var now = DateTime.UtcNow;
+        var elapsedMinutes = (now - o.CreatedAt).TotalMinutes;
         var canCancel = o.Status == "Pending" && elapsedMinutes <= 2.5;
+
+        var activeExpiresAt = o.PaymentExpiresAt;
+        var latestTx = o.PaymentTransactions?.OrderByDescending(pt => pt.CreatedAt).FirstOrDefault();
+        if (latestTx != null)
+        {
+            activeExpiresAt = latestTx.PaymentExpiresAt;
+        }
+
+        int remainingPaymentSecs = 0;
+        if (o.PaymentMethod != "COD" && o.PaymentStatus == "Pending" && activeExpiresAt.HasValue)
+        {
+            remainingPaymentSecs = Math.Max(0, (int)Math.Ceiling((activeExpiresAt.Value - now).TotalSeconds));
+        }
+
+        var effectivePaymentStatus = o.PaymentStatus;
+        if (o.PaymentMethod != "COD" && effectivePaymentStatus == "Pending" && activeExpiresAt.HasValue && remainingPaymentSecs <= 0)
+        {
+            effectivePaymentStatus = "Expired";
+        }
 
         return new OrderResponse
         {
@@ -518,7 +567,7 @@ public class OrderService : IOrderService
             ShippingFee = o.ShippingFee,
             TotalAmount = o.TotalAmount,
             Status = o.Status,
-            PaymentStatus = o.PaymentStatus,
+            PaymentStatus = effectivePaymentStatus,
             PaymentMethod = o.PaymentMethod,
             CustomerName = o.CustomerName,
             CustomerPhone = o.CustomerPhone,
@@ -526,7 +575,41 @@ public class OrderService : IOrderService
             Note = o.Note,
             CancelReason = o.CancelReason,
             CanCancel = canCancel,
-            CreatedAt = o.CreatedAt,
+            CreatedAt = DateTime.SpecifyKind(o.CreatedAt, DateTimeKind.Utc),
+            PaymentExpiresAt = activeExpiresAt.HasValue ? DateTime.SpecifyKind(activeExpiresAt.Value, DateTimeKind.Utc) : null,
+            PaidAt = o.PaidAt.HasValue ? DateTime.SpecifyKind(o.PaidAt.Value, DateTimeKind.Utc) : null,
+            RemainingPaymentSeconds = remainingPaymentSecs,
+            ServerTimeUtc = now,
+            PaymentTransactions = o.PaymentTransactions != null
+                ? o.PaymentTransactions.OrderByDescending(pt => pt.CreatedAt).Select(pt =>
+                {
+                    int rem = pt.PaymentStatus == "Pending"
+                        ? Math.Max(0, (int)Math.Ceiling((pt.PaymentExpiresAt - now).TotalSeconds))
+                        : 0;
+                    bool exp = pt.PaymentStatus == "Expired" || (pt.PaymentStatus == "Pending" && rem <= 0);
+                    return new PaymentTransactionDto
+                    {
+                        Id = pt.Id,
+                        OrderId = pt.OrderId,
+                        OrderCode = o.OrderCode,
+                        MomoOrderId = pt.MomoOrderId,
+                        RequestId = pt.RequestId,
+                        TransactionId = pt.TransactionId,
+                        PaymentMethod = pt.PaymentMethod,
+                        Amount = pt.Amount,
+                        PaymentStatus = exp && pt.PaymentStatus == "Pending" ? "Expired" : pt.PaymentStatus,
+                        PayUrl = pt.PayUrl,
+                        QrCodeUrl = pt.QrCodeUrl,
+                        Deeplink = pt.Deeplink,
+                        CreatedAt = DateTime.SpecifyKind(pt.CreatedAt, DateTimeKind.Utc),
+                        PaymentExpiresAt = DateTime.SpecifyKind(pt.PaymentExpiresAt, DateTimeKind.Utc),
+                        PaidAt = pt.PaidAt.HasValue ? DateTime.SpecifyKind(pt.PaidAt.Value, DateTimeKind.Utc) : null,
+                        RemainingSeconds = rem,
+                        ServerTimeUtc = now,
+                        IsExpired = exp
+                    };
+                }).ToList()
+                : new List<PaymentTransactionDto>(),
             ShipperId = o.DeliveryAssignment != null ? o.DeliveryAssignment.ShipperId : null,
             ShipperName = o.DeliveryAssignment != null && o.DeliveryAssignment.Shipper != null ? o.DeliveryAssignment.Shipper.FullName : string.Empty,
             ShipperPhone = o.DeliveryAssignment != null && o.DeliveryAssignment.Shipper != null ? o.DeliveryAssignment.Shipper.PhoneNumber : string.Empty,

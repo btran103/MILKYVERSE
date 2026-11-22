@@ -2,11 +2,11 @@
 
 export const dynamic = "force-dynamic";
 
-import React, { useEffect, useState, use } from "react";
+import React, { useEffect, useState, use, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { OrderResponse } from "@/types";
+import { OrderResponse, SePayQrResponse } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { getDistinctOrderItemImage } from "@/lib/orderImageHelper";
 import confetti from "canvas-confetti";
@@ -25,9 +25,10 @@ import {
   QrCode,
   RotateCcw,
   Radio,
-  Zap,
-  Globe,
+  ExternalLink,
   RefreshCw,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function OrderDetailPage({
@@ -37,23 +38,14 @@ export default function OrderDetailPage({
 }) {
   const resolvedParams = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { addItem } = useCart();
   const [order, setOrder] = useState<OrderResponse | null>(null);
+  const [sePaySession, setSePaySession] = useState<SePayQrResponse | null>(null);
+  const [remainingPaymentSecs, setRemainingPaymentSecs] = useState<number>(900);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [notifiedTransfer, setNotifiedTransfer] = useState(false);
-
-  // Ngrok & Online Payment Verification Timer State (300s = 5 minutes)
-  const [ngrokInfo, setNgrokInfo] = useState<{ isRunning: boolean; publicUrl: string | null; webhookUrl: string }>({
-    isRunning: false,
-    publicUrl: null,
-    webhookUrl: "http://localhost:5000/api/orders/payment-webhook",
-  });
-  const [customNgrokUrl, setCustomNgrokUrl] = useState("");
-  const [qrMode, setQrMode] = useState<"TPBANK" | "ZALOPAY" | "NGROK_QR">("TPBANK");
-  const [extraVerifySecs, setExtraVerifySecs] = useState(0);
-  const [simulatingWebhook, setSimulatingWebhook] = useState(false);
 
   const handleReorder = () => {
     if (!order || !order.items || order.items.length === 0) return;
@@ -116,20 +108,39 @@ export default function OrderDetailPage({
   };
 
   useEffect(() => {
-    async function fetchOrder() {
+    async function fetchOrderAndPayment() {
+      const orderIdNum = parseInt(resolvedParams.id, 10);
       try {
-        const [data, tunnel] = await Promise.all([
-          api.getOrderById(parseInt(resolvedParams.id, 10)),
-          api.getNgrokTunnel().catch(() => ({
-            isRunning: false,
-            publicUrl: null,
-            webhookUrl: "http://localhost:5000/api/orders/payment-webhook",
-          })),
-        ]);
+        const data = await api.getOrderById(orderIdNum);
         setOrder(data);
-        setNgrokInfo(tunnel);
-        if (tunnel.publicUrl) {
-          setCustomNgrokUrl(tunnel.publicUrl);
+
+        if (data.paymentMethod === "SEPAY" && data.paymentStatus !== "Paid" && data.status !== "Cancelled") {
+          const accountNumber = "00000107071";
+          const bank = "TPBank";
+          const accountName = "HA BAO TRAN";
+          const description = `MILKY ${data.orderCode}`;
+          const qrUrl = `https://qr.sepay.vn/img?acc=${encodeURIComponent(accountNumber)}&bank=${encodeURIComponent(bank)}&amount=${Math.round(data.totalAmount)}&des=${encodeURIComponent(description)}&template=compact`;
+
+          let qr: SePayQrResponse = {
+            orderId: data.id,
+            orderCode: data.orderCode,
+            amount: data.totalAmount,
+            description,
+            bank,
+            accountNumber,
+            accountName,
+            qrUrl,
+            paymentStatus: data.paymentStatus,
+            expiredSeconds: 900,
+          };
+
+          try {
+            const apiQr = await api.getSePayQr(orderIdNum);
+            if (apiQr) qr = apiQr;
+          } catch {
+            // fallback trực tiếp
+          }
+          setSePaySession(qr);
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Không tìm thấy đơn hàng.";
@@ -138,60 +149,50 @@ export default function OrderDetailPage({
         setLoading(false);
       }
     }
-    fetchOrder();
+    fetchOrderAndPayment();
   }, [resolvedParams.id]);
 
-  // Realtime Polling mỗi 3 giây để bắt tín hiệu Webhook từ Ngrok khi khách quét QR thanh toán
+  // Đồng hồ đếm ngược 15 phút (900s) cho giao dịch VietQR SePay
   useEffect(() => {
-    if (!order || order.paymentStatus === "Paid" || order.status === "Cancelled" || order.paymentMethod === "COD") {
-      return;
-    }
+    if (!order || order.paymentMethod !== "SEPAY" || order.paymentStatus === "Paid" || order.status === "Cancelled") return;
+
+    const tick = setInterval(() => {
+      setRemainingPaymentSecs((prev) => {
+        if (prev <= 1) {
+          clearInterval(tick);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(tick);
+  }, [order?.paymentMethod, order?.paymentStatus, order?.status]);
+
+  // Real-Time Polling mỗi 2 giây: SePay Webhook cập nhật đơn -> frontend tự động nhận diện thành công
+  useEffect(() => {
+    if (!order || order.paymentMethod !== "SEPAY" || order.status === "Cancelled") return;
+    if (order.paymentStatus === "Paid" || order.status === "Confirmed" || order.status === "Completed") return;
 
     const pollInterval = setInterval(async () => {
       try {
-        const latest = await api.getOrderById(order.id);
-        if (latest.paymentStatus === "Paid" && order.paymentStatus !== "Paid") {
-          setOrder(latest);
+        const latestOrder = await api.getOrderById(order.id);
+        if (latestOrder.paymentStatus === "Paid" || latestOrder.status === "Confirmed" || latestOrder.status === "Completed") {
+          setOrder(latestOrder);
           confetti({
-            particleCount: 140,
+            particleCount: 150,
             spread: 80,
             origin: { y: 0.6 },
-            colors: ["#4E7D55", "#6F4E37", "#C5A059", "#F7D6D0"],
+            colors: ["#2563EB", "#4E7D55", "#6F4E37", "#C5A059"],
           });
-        } else if (latest.status !== order.status) {
-          setOrder(latest);
         }
       } catch {
-        // Ignore transient poll errors
+        // network retry
       }
-    }, 3000);
+    }, 2000);
 
     return () => clearInterval(pollInterval);
-  }, [order]);
-
-  const handleSimulateNgrokWebhook = async () => {
-    if (!order) return;
-    setSimulatingWebhook(true);
-    try {
-      const updated = await api.triggerPaymentWebhook({
-        orderId: order.id,
-        orderCode: order.orderCode,
-        amount: order.totalAmount,
-        provider: ngrokInfo.isRunning ? `Ngrok Tunnel (${ngrokInfo.publicUrl})` : "Ngrok Webhook Simulator",
-      });
-      setOrder(updated);
-      confetti({
-        particleCount: 140,
-        spread: 80,
-        origin: { y: 0.6 },
-        colors: ["#4E7D55", "#6F4E37", "#C5A059", "#F7D6D0"],
-      });
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Lỗi giả lập Webhook Ngrok");
-    } finally {
-      setSimulatingWebhook(false);
-    }
-  };
+  }, [order?.id, order?.paymentMethod, order?.paymentStatus, order?.status]);
 
   if (loading) {
     return (
@@ -238,19 +239,16 @@ export default function OrderDetailPage({
   const currentStepIndex = statusIndexMap[order.status] ?? 0;
   const isCancelled = order.status === "Cancelled";
 
-  // Calculate 2-minute cancellation countdown & 5-minute online payment verification timer
+  // Calculate 2-minute cancellation countdown & 2-minute MoMo online payment session timer
   const createdMs = new Date(order.createdAt).getTime();
   const elapsedSeconds = Math.max(0, Math.floor((currentTime - createdMs) / 1000));
   const remainingSeconds = Math.max(0, 120 - elapsedSeconds);
   const canCancelNow = order.status === "Pending" && remainingSeconds > 0;
 
-  // 5-minute (300s) Online Payment Verification Countdown (plus any user extensions)
-  const totalVerifyWindow = 300 + extraVerifySecs;
-  const verifyRemainingSecs = Math.max(0, totalVerifyWindow - elapsedSeconds);
-  const verifyProgressPercent = Math.min(100, Math.max(0, (verifyRemainingSecs / totalVerifyWindow) * 100));
-  const activeBaseNgrok = (customNgrokUrl.trim() || ngrokInfo.publicUrl || "http://localhost:5000").replace(/\/+$/, "");
-  const ngrokMobileConfirmUrl = `${activeBaseNgrok}/api/orders/ngrok-confirm/${order.orderCode}`;
-  const ngrokWebhookEndpoint = `${activeBaseNgrok}/api/orders/payment-webhook`;
+  const effectivePaymentStatus = order.paymentStatus;
+  const isPaymentSuccess = effectivePaymentStatus === "Paid" || effectivePaymentStatus === "Success" || order.status === "Confirmed" || order.status === "Completed";
+  const isPaymentFailedOrCancelled = effectivePaymentStatus === "Failed" || effectivePaymentStatus === "Cancelled";
+  const isPaymentExpired = !isPaymentSuccess && (effectivePaymentStatus === "Expired" || remainingPaymentSecs <= 0);
 
   // Format countdown mm:ss
   const formatTime = (secs: number) => {
@@ -470,6 +468,9 @@ export default function OrderDetailPage({
                       alt={item.productName}
                       className="w-full h-full object-cover"
                       loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/images/menu/ca-vien-chien-thap-cam-met-lon.jpg";
+                      }}
                     />
                     <span className="absolute bottom-1 right-1 bg-[#6F4E37] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-sm">
                       x{item.quantity}
@@ -552,12 +553,24 @@ export default function OrderDetailPage({
               <span>Trạng thái thanh toán:</span>
               <span
                 className={`font-bold px-2 py-0.5 rounded-md ${
-                  order.paymentStatus === "Paid"
+                  isPaymentSuccess
                     ? "bg-emerald-100 text-emerald-800"
+                    : isPaymentExpired || isPaymentFailedOrCancelled
+                    ? "bg-red-100 text-red-800"
                     : "bg-amber-100 text-amber-800"
                 }`}
               >
-                {order.paymentStatus === "Paid" ? "Đã thanh toán" : "Chưa thanh toán"}
+                {isPaymentSuccess
+                  ? "Success (Đã thanh toán)"
+                  : effectivePaymentStatus === "Expired" || isPaymentExpired
+                  ? "Expired (Hết hạn phiên 15 phút)"
+                  : effectivePaymentStatus === "Failed"
+                  ? "Failed (Thanh toán thất bại)"
+                  : effectivePaymentStatus === "Cancelled"
+                  ? "Cancelled (Đã hủy thanh toán)"
+                  : effectivePaymentStatus === "Refunded"
+                  ? "Refunded (Đã hoàn tiền)"
+                  : "Pending (Đang chờ thanh toán)"}
               </span>
             </div>
             <div className="flex justify-between text-[#786C65]">
@@ -585,243 +598,72 @@ export default function OrderDetailPage({
             </div>
           </div>
 
-          {/* Online Payment Verification Card with Countdown Timer & Ngrok Webhook */}
-          {order.paymentStatus !== "Paid" && order.paymentMethod !== "COD" && !isCancelled && (
-            <div className="bg-white p-6 rounded-3xl border-2 border-[#6F4E37] shadow-lg space-y-4 text-center">
+          {/* SePay VietQR TPBank Card */}
+          {!isPaymentSuccess && order.paymentMethod === "SEPAY" && !isCancelled && sePaySession && (
+            <div className="bg-white p-6 rounded-3xl border-2 border-[#2563EB] shadow-lg space-y-4 text-center">
               <div className="flex items-center justify-between pb-2 border-b border-[#FAF7F2]">
                 <div className="flex items-center gap-2 text-xs font-black text-[#2D2522]">
-                  <Radio className="w-4 h-4 text-emerald-600 animate-pulse" />
-                  <span>Cổng Xác Thực Thanh Toán Online (Ngrok)</span>
+                  <Radio className={`w-4 h-4 ${isPaymentExpired ? "text-red-600" : "text-blue-600 animate-pulse"}`} />
+                  <span>Thanh Toán SePay • VietQR TPBank</span>
                 </div>
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                  Đang lắng nghe Webhook...
-                </span>
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-mono font-bold text-xs border border-blue-200">
+                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{formatTime(remainingPaymentSecs)}</span>
+                </div>
               </div>
 
-              {/* Countdown Timer Box with Progress Bar */}
-              <div
-                className={`p-3.5 rounded-2xl border space-y-2 ${
-                  verifyRemainingSecs > 0
-                    ? "bg-amber-50/90 border-amber-200 text-amber-950"
-                    : "bg-red-50 border-red-200 text-red-800"
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-[#6F4E37]" />
-                    <span>Thời gian xác thực giao dịch:</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-base font-black text-red-600 bg-white px-2.5 py-0.5 rounded-lg border border-red-200">
-                      {formatTime(verifyRemainingSecs)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setExtraVerifySecs((prev) => prev + 120)}
-                      title="Gia hạn thêm 2 phút xác thực"
-                      className="text-[10px] px-2 py-1 rounded-lg bg-white border border-amber-300 text-[#6F4E37] hover:bg-[#FAF7F2] flex items-center gap-1 font-bold"
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      <span>+2p</span>
-                    </button>
-                  </div>
+              {/* Status Banner */}
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs text-left space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Trạng thái: CHỜ CHUYỂN KHOẢN (Hiệu lực 15 phút)</span>
                 </div>
-
-                {/* Live Progress Bar */}
-                <div className="w-full h-2 bg-white rounded-full overflow-hidden border border-amber-200/60">
-                  <div
-                    className={`h-full transition-all duration-1000 ${
-                      verifyRemainingSecs > 60 ? "bg-[#4E7D55]" : "bg-red-500"
-                    }`}
-                    style={{ width: `${verifyProgressPercent}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-[#786C65] text-left">
-                  {verifyRemainingSecs > 0
-                    ? "Hệ thống tự động kiểm tra trạng thái mỗi 3 giây. Ngay khi Ngrok nhận được tín hiệu thanh toán, đơn hàng sẽ tự động duyệt!"
-                    : "Đã hết thời gian chờ xác thực! Bấm '+2p' để gia hạn thêm thời gian hoặc thử lại."}
+                <p className="text-[11px] text-amber-700 leading-normal">
+                  Quét mã VietQR bằng app ngân hàng của bạn. Tiền vào TPBank là SePay <strong>tự động duyệt đơn ngay lập tức</strong>!
                 </p>
               </div>
 
-              {/* Switcher: 1. TPBank VietQR vs 2. ZaloPay Đa Năng vs 3. QR Ngrok Auto-Verify */}
-              <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-[#FAF7F2] border border-[#EFE6DC] text-[10.5px] font-bold">
-                <button
-                  type="button"
-                  onClick={() => setQrMode("TPBANK")}
-                  className={`py-2 px-1.5 rounded-xl transition-all ${
-                    qrMode === "TPBANK"
-                      ? "bg-[#6F4E37] text-white shadow-xs"
-                      : "text-[#786C65] hover:text-[#2D2522]"
-                  }`}
-                >
-                  1. TPBank VietQR
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQrMode("ZALOPAY")}
-                  className={`py-2 px-1.5 rounded-xl transition-all ${
-                    qrMode === "ZALOPAY"
-                      ? "bg-[#6F4E37] text-white shadow-xs"
-                      : "text-[#786C65] hover:text-[#2D2522]"
-                  }`}
-                >
-                  2. ZaloPay / Đa Năng
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQrMode("NGROK_QR")}
-                  className={`py-2 px-1.5 rounded-xl transition-all ${
-                    qrMode === "NGROK_QR"
-                      ? "bg-emerald-700 text-white shadow-xs"
-                      : "text-[#786C65] hover:text-[#2D2522]"
-                  }`}
-                >
-                  3. QR Ngrok Test
-                </button>
-              </div>
-
-              {qrMode === "TPBANK" ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-[#786C65]">
-                    Mã <strong>TPBank VietQR Chính Chủ (HA BAO TRAN • 0000 0107 071)</strong> — Quét bằng mọi App Ngân hàng để thanh toán <strong>{order.totalAmount.toLocaleString("vi-VN")}đ</strong>:
-                  </p>
-                  <div className="relative mx-auto w-64 h-76 bg-white p-2 rounded-2xl border-2 border-[#6F4E37] shadow-md flex items-center justify-center overflow-hidden">
-                    <img
-                      src="/images/qr-tpbank.png"
-                      alt="Mã TPBank VietQR HA BAO TRAN"
-                      className="w-full h-full object-contain rounded-xl"
-                    />
-                  </div>
-                </div>
-              ) : qrMode === "ZALOPAY" ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-[#786C65]">
-                    Mã <strong>QR Đa Năng ZaloPay / 50+ Ngân Hàng (HA BAO TRAN)</strong> — Nhận tiền từ mọi ứng dụng chuyển tiền cho đơn <strong>#{order.orderCode}</strong>:
-                  </p>
-                  <div className="relative mx-auto w-64 h-76 bg-white p-2 rounded-2xl border-2 border-[#0068FF] shadow-md flex items-center justify-center overflow-hidden">
-                    <img
-                      src="/images/qr-zalopay.png"
-                      alt="Mã QR ZaloPay Đa Năng HA BAO TRAN"
-                      className="w-full h-full object-contain rounded-xl"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-xs text-[#786C65]">
-                    Dùng <strong>Camera Điện Thoại</strong> quét mã QR Ngrok này để xác thực quyền thanh toán trực tiếp từ điện thoại về máy tính:
-                  </p>
-                  <div className="relative mx-auto w-56 h-56 bg-white p-3 rounded-2xl border-2 border-emerald-600 shadow-md flex items-center justify-center">
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(ngrokMobileConfirmUrl)}`}
-                      alt="Mã QR Ngrok Xác Thực Nhanh"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  <p className="text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 break-all">
-                    {ngrokMobileConfirmUrl}
-                  </p>
-                </div>
-              )}
-
-              {/* Bank Account Verification Details */}
-              <div className="bg-[#FAF7F2] p-3.5 rounded-2xl border border-[#EFE6DC] text-left text-xs space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[#786C65]">Ngân hàng / Ví xác thực:</span>
-                  <span className="font-bold text-[#2D2522]">TPBank • VietQR • ZaloPay</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#786C65]">Chủ tài khoản:</span>
-                  <span className="font-black text-[#2D2522]">HA BAO TRAN</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#786C65]">Số tài khoản TPBank:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-black text-[#6F4E37]">0000 0107 071</span>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy("00000107071", "account")}
-                      className="p-1 rounded-md hover:bg-white text-[#786C65]"
-                      title="Sao chép số tài khoản"
-                    >
-                      {copiedField === "account" ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[#786C65]">Số tiền thanh toán:</span>
-                  <span className="font-black text-[#6F4E37] text-sm">
-                    {order.totalAmount.toLocaleString("vi-VN")}đ
-                  </span>
-                </div>
-              </div>
-
-              {/* Ngrok Webhook Configuration & Live Detection Box */}
-              <div className="bg-[#FAF7F2] p-3.5 rounded-2xl border border-[#EFE6DC] text-left text-xs space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-extrabold text-[#2D2522] flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-[#6F4E37]" />
-                    <span>Cấu hình Đường Hầm Ngrok:</span>
-                  </span>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      ngrokInfo.isRunning || customNgrokUrl.includes("ngrok")
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-gray-200 text-gray-700"
-                    }`}
-                  >
-                    {ngrokInfo.isRunning
-                      ? "Đã kết nối Ngrok (:4040)"
-                      : customNgrokUrl.includes("ngrok")
-                      ? "Đang dùng URL Ngrok"
-                      : "Localhost (:5000)"}
-                  </span>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-[#786C65] block mb-1">
-                    Domain Ngrok của bạn (chạy lệnh `ngrok http 5000` rồi dán vào đây nếu chưa tự nhận):
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="https://xxxx-xx-xx.ngrok-free.app"
-                    value={customNgrokUrl}
-                    onChange={(e) => setCustomNgrokUrl(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-xl bg-white border border-[#EFE6DC] text-[11px] font-mono focus:outline-none focus:border-[#6F4E37]"
+              {/* VietQR Image */}
+              <div className="space-y-1.5">
+                <div className="relative mx-auto max-w-[220px] bg-white p-2 rounded-2xl border-2 border-[#2563EB] shadow-md">
+                  <img
+                    src={sePaySession.qrUrl}
+                    alt="Mã VietQR SePay TPBank"
+                    className="w-full h-auto object-contain rounded-xl"
                   />
                 </div>
+                <p className="text-[11px] font-bold text-[#2563EB]">
+                  TPBank • {sePaySession.accountName}
+                </p>
+              </div>
 
-                <div className="pt-1 border-t border-[#EFE6DC] space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-[#786C65] font-bold">Webhook URL (Casso / SePay / Postman):</span>
+              {/* Bank Details */}
+              <div className="bg-[#FAF7F2] p-3 rounded-2xl border border-[#EFE6DC] text-left text-xs space-y-2">
+                <div className="flex justify-between items-center text-[#786C65]">
+                  <span>Số tài khoản TPBank:</span>
+                  <strong className="font-mono font-bold text-[#2D2522]">
+                    {sePaySession.accountNumber}
+                  </strong>
+                </div>
+                <div className="flex justify-between items-center text-[#786C65]">
+                  <span>Số tiền cần chuyển:</span>
+                  <strong className="text-base font-black text-emerald-700">
+                    {sePaySession.amount.toLocaleString("vi-VN")}đ
+                  </strong>
+                </div>
+                <div className="flex justify-between items-center text-[#786C65]">
+                  <span>Nội dung chuyển khoản:</span>
+                  <div className="flex items-center gap-1.5">
+                    <strong className="font-mono font-bold text-[#2D2522] bg-white px-2 py-0.5 rounded border border-[#EFE6DC]">
+                      {sePaySession.description}
+                    </strong>
                     <button
                       type="button"
-                      onClick={() => handleCopy(ngrokWebhookEndpoint, "webhook")}
-                      className="text-[10px] font-bold text-[#6F4E37] hover:underline flex items-center gap-1"
+                      onClick={() => handleCopy(sePaySession.description, "des")}
+                      className="p-1 rounded hover:bg-white text-[#786C65]"
+                      title="Sao chép nội dung"
                     >
-                      {copiedField === "webhook" ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                      <span>{copiedField === "webhook" ? "Đã chép" : "Sao chép"}</span>
-                    </button>
-                  </div>
-                  <p className="text-[10px] font-mono bg-white p-1.5 rounded-lg border border-[#EFE6DC] text-[#2D2522] break-all">
-                    POST {ngrokWebhookEndpoint}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-1 border-t border-[#EFE6DC]">
-                  <span className="text-[#786C65]">Nội dung CK:</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-[#2D2522]">MILKY{order.orderCode}</span>
-                    <button
-                      onClick={() => handleCopy(`MILKY${order.orderCode}`, "content")}
-                      className="p-1 rounded-md hover:bg-white text-[#786C65]"
-                      title="Sao chép nội dung chuyển khoản"
-                    >
-                      {copiedField === "content" ? (
+                      {copiedField === "des" ? (
                         <Check className="w-3.5 h-3.5 text-emerald-600" />
                       ) : (
                         <Copy className="w-3.5 h-3.5" />
@@ -831,38 +673,37 @@ export default function OrderDetailPage({
                 </div>
               </div>
 
-              {/* 1-Click Simulate Ngrok Webhook Callback Button */}
-              <div className="space-y-2 pt-1">
-                <button
-                  type="button"
-                  disabled={simulatingWebhook || verifyRemainingSecs === 0}
-                  onClick={handleSimulateNgrokWebhook}
-                  className="w-full py-3 rounded-2xl bg-emerald-600 text-white text-xs font-extrabold hover:bg-emerald-700 shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <Zap className="w-4 h-4" />
-                  <span>
-                    {simulatingWebhook
-                      ? "Đang gửi tín hiệu Webhook..."
-                      : "⚡ Giả Lập Webhook Ngrok Báo Tiền Về Ngay (1-Click)"}
-                  </span>
-                </button>
-
-                {notifiedTransfer ? (
-                  <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs flex items-center justify-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Đã ghi nhận! Hệ thống đang đối soát giao dịch của bạn.</span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setNotifiedTransfer(true)}
-                    className="w-full py-2 rounded-xl bg-white border border-[#EFE6DC] text-[#6F4E37] text-xs font-bold hover:bg-[#FAF7F2] transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Báo nhân viên quầy kiểm tra thủ công</span>
-                  </button>
-                )}
+              {/* Live Listening Radar */}
+              <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-center gap-2.5 font-bold">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping shrink-0" />
+                <span>Đang tự động lắng nghe giao dịch TPBank qua SePay...</span>
               </div>
+
+              <p className="text-[11px] text-[#786C65] leading-relaxed">
+                💡 Khách hàng chỉ cần quét mã QR bằng App Ngân Hàng và chuyển khoản. Sau khi tiền vào TPBank, SePay sẽ <strong>TỰ ĐỘNG XÁC NHẬN ĐƠN HÀNG</strong> ngay lập tức mà bạn không cần phải bấm bất kỳ nút nào!
+              </p>
+            </div>
+          )}
+
+          {/* Confirmed SePay Payment Receipt Card when Success */}
+          {isPaymentSuccess && order.paymentMethod === "SEPAY" && (
+            <div className="bg-emerald-50 p-5 rounded-3xl border border-emerald-200 space-y-2 text-xs text-emerald-950">
+              <div className="flex items-center gap-2 font-black text-sm text-emerald-800">
+                <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                <span>Đã Xác Thực Thanh Toán SePay (TPBank) Thành Công</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-emerald-700">Ngân hàng thụ hưởng:</span>
+                <span className="font-bold">TPBank</span>
+              </div>
+              {order.paidAt && (
+                <div className="flex justify-between">
+                  <span className="text-emerald-700">Thời điểm thanh toán (PaidAt):</span>
+                  <span className="font-mono">
+                    {new Date(order.paidAt).toLocaleString("vi-VN")}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

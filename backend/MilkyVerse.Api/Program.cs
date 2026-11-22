@@ -64,6 +64,8 @@ builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IAIBaristaService, AIBaristaService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IDeliveryService, DeliveryService>();
+builder.Services.AddScoped<IMomoPaymentService, MomoPaymentService>();
+builder.Services.AddScoped<ISePayService, SePayService>();
 builder.Services.AddHttpClient();
 
 // 4. JWT Authentication

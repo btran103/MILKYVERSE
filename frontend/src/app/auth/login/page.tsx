@@ -1,21 +1,65 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff } from "lucide-react";
 
+function getTargetRoute(role?: string, email?: string, redirectUrl?: string | null): string {
+  if (redirectUrl && redirectUrl !== "/" && redirectUrl !== "/auth/login") {
+    if (role === "Customer") return redirectUrl;
+    if ((role === "Admin" || role === "Manager") && redirectUrl.startsWith("/admin")) return redirectUrl;
+    if (role === "Staff" && (redirectUrl.startsWith("/staff") || redirectUrl.startsWith("/counter"))) return redirectUrl;
+    if (role === "WarehouseStaff" && redirectUrl.startsWith("/warehouse")) return redirectUrl;
+    if (role === "DeliveryStaff" && redirectUrl.startsWith("/delivery")) return redirectUrl;
+  }
+
+  switch (role) {
+    case "Admin":
+    case "Manager":
+      return "/admin";
+    case "WarehouseStaff":
+      return "/warehouse";
+    case "DeliveryStaff":
+      return "/delivery";
+    case "Staff":
+      if (email && email.toLowerCase().includes("quay")) {
+        return "/counter";
+      }
+      return "/staff";
+    case "Customer":
+    default:
+      return redirectUrl || "/";
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, user, isLoading } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Nếu người dùng ĐÃ ĐĂNG NHẬP rồi thì tự động chuyển hướng theo vai trò
+  useEffect(() => {
+    if (!isLoading && user) {
+      const redirectUrl =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("redirect")
+          : null;
+      const target = getTargetRoute(user.role, user.email, redirectUrl);
+      if (typeof window !== "undefined") {
+        window.location.href = target;
+      } else {
+        router.replace(target);
+      }
+    }
+  }, [user, isLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,19 +75,29 @@ export default function LoginPage() {
           ? new URLSearchParams(window.location.search).get("redirect")
           : null;
 
-      if (redirectUrl) {
-        router.push(redirectUrl);
+      const target = getTargetRoute(res.role, email.trim(), redirectUrl);
+      if (typeof window !== "undefined") {
+        window.location.href = target;
       } else {
-        router.push("/");
+        router.push(target);
       }
     } else {
       const msg =
-        res.message?.includes("Failed to fetch") || res.message?.includes("kết nối")
-          ? "Không thể kết nối máy chủ Backend. Vui lòng kiểm tra lại kết nối mạng."
+        res.message?.includes("Failed to fetch") || res.message?.includes("kết nối") || res.message?.includes("connect")
+          ? "Không thể kết nối máy chủ Backend (:5000). Bạn hãy chạy lệnh 'dotnet run' ở thư mục backend nhé!"
           : res.message || "Email hoặc mật khẩu không chính xác.";
       setError(msg);
     }
   };
+
+  if (user) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-[#6F4E37] border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-bold text-[#786C65]">Bạn đã đăng nhập. Đang chuyển hướng...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
@@ -149,6 +203,91 @@ export default function LoginPage() {
             </Link>
           </p>
         </form>
+
+        {/* Quick Role Fillers (Dành cho kiểm thử đồ án / thuyết trình) */}
+        <div className="bg-[#FAF7F2] p-4 rounded-3xl border border-[#EFE6DC] space-y-2.5">
+          <p className="text-[11px] font-black text-[#6F4E37] uppercase tracking-wider text-center">
+            ⚡ Chọn Nhanh Tài Khoản Theo Vai Trò
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px]">
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("admin@milkyverse.com");
+                setPassword("Admin@123");
+              }}
+              className="p-2 rounded-xl bg-white border border-[#EFE6DC] hover:border-[#6F4E37] text-left hover:shadow-xs transition-all font-bold text-[#2D2522]"
+            >
+              👑 Quản trị viên
+              <span className="block text-[9px] text-[#786C65] font-normal truncate">/admin</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("manager@milkyverse.com");
+                setPassword("Manager@123");
+              }}
+              className="p-2 rounded-xl bg-white border border-[#EFE6DC] hover:border-[#6F4E37] text-left hover:shadow-xs transition-all font-bold text-[#2D2522]"
+            >
+              💼 Quản lý CH
+              <span className="block text-[9px] text-[#786C65] font-normal truncate">/admin</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("quay@milkyverse.com");
+                setPassword("Staff@123");
+              }}
+              className="p-2 rounded-xl bg-white border border-[#EFE6DC] hover:border-[#6F4E37] text-left hover:shadow-xs transition-all font-bold text-[#2D2522]"
+            >
+              🛎️ NV Quầy (POS)
+              <span className="block text-[9px] text-[#786C65] font-normal truncate">/counter</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("staff@milkyverse.com");
+                setPassword("Staff@123");
+              }}
+              className="p-2 rounded-xl bg-white border border-[#EFE6DC] hover:border-[#6F4E37] text-left hover:shadow-xs transition-all font-bold text-[#2D2522]"
+            >
+              ☕ Bếp &amp; Barista
+              <span className="block text-[9px] text-[#786C65] font-normal truncate">/staff</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("warehouse@milkyverse.com");
+                setPassword("Warehouse@123");
+              }}
+              className="p-2 rounded-xl bg-white border border-[#EFE6DC] hover:border-[#6F4E37] text-left hover:shadow-xs transition-all font-bold text-[#2D2522]"
+            >
+              📦 Thủ kho FEFO
+              <span className="block text-[9px] text-[#786C65] font-normal truncate">/warehouse</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEmail("shipper@milkyverse.com");
+                setPassword("Shipper@123");
+              }}
+              className="p-2 rounded-xl bg-white border border-[#EFE6DC] hover:border-[#6F4E37] text-left hover:shadow-xs transition-all font-bold text-[#2D2522]"
+            >
+              🛵 Shipper
+              <span className="block text-[9px] text-[#786C65] font-normal truncate">/delivery</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEmail("khachhang@milkyverse.com");
+              setPassword("Customer@123");
+            }}
+            className="w-full p-2 rounded-xl bg-white border border-[#EFE6DC] hover:border-[#6F4E37] text-center hover:shadow-xs transition-all font-bold text-xs text-[#6F4E37]"
+          >
+            🛍️ Khách Hàng VIP (khachhang@milkyverse.com) → Trang chủ / Menu
+          </button>
+        </div>
       </div>
     </div>
   );

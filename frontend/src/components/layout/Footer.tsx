@@ -220,14 +220,14 @@ export const Footer: React.FC = () => {
               <ul className="space-y-3 text-sm text-[#A89F91]">
                 <li>
                   <a
-                    href="https://maps.google.com/?q=Số+1+Đường+Thiên+Hà,+Quận+1,+TP.+Hồ+Chí+Minh"
+                    href="https://maps.google.com/?q=Thôn+Ngọc+Thạnh+2,+Xã+Tuy+Phước+Tây,+Tỉnh+Gia+Lai"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-start gap-2.5 hover:text-[#F7D6D0] transition-colors group"
                     title="Mở trên Google Maps"
                   >
                     <MapPin className="w-4 h-4 text-[#F7D6D0] mt-0.5 shrink-0 group-hover:scale-110 transition-transform" />
-                    <span className="flex-1">Số 1 Đường Thiên Hà, Quận 1, TP. Hồ Chí Minh</span>
+                    <span className="flex-1">Thôn Ngọc Thạnh 2, Xã Tuy Phước Tây, Tỉnh Gia Lai</span>
                     <ExternalLink className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100 shrink-0 mt-0.5" />
                   </a>
                 </li>
@@ -239,24 +239,24 @@ export const Footer: React.FC = () => {
                   >
                     <Phone className="w-4 h-4 text-[#F7D6D0] shrink-0 group-hover:scale-110 transition-transform" />
                     <span className="font-semibold text-white group-hover:text-[#F7D6D0]">
-                      Hotline: 1900 888 999
+                      Hotline: 1900 1003
                     </span>
                     <span className="text-xs text-[#A89F91]">(08:00 - 22:30)</span>
                   </a>
                 </li>
                 <li>
                   <a
-                    href="mailto:support@milkyverse.com"
+                    href="mailto:milkyverse103@gmail.com"
                     className="flex items-center gap-2.5 hover:text-[#F7D6D0] transition-colors group"
                     title="Gửi email cho bộ phận CSKH"
                   >
                     <Mail className="w-4 h-4 text-[#F7D6D0] shrink-0 group-hover:scale-110 transition-transform" />
-                    <span>support@milkyverse.com</span>
+                    <span>milkyverse103@gmail.com</span>
                   </a>
                 </li>
                 <li className="flex items-center gap-2.5 text-[#A89F91]">
                   <Clock className="w-4 h-4 text-[#F7D6D0] shrink-0" />
-                  <span>Mở cửa: 07:30 - 23:00 Hàng ngày</span>
+                  <span>Mở cửa: 07:30 - 21:00 Hàng ngày</span>
                 </li>
               </ul>
             </div>

@@ -54,6 +54,66 @@ public static class DbInitializer
         await context.Database.EnsureCreatedAsync();
         await EnsureColumnExistsAsync(context, "Users", "AvatarUrl", "TEXT");
         await EnsureColumnExistsAsync(context, "Orders", "CancelReason", "TEXT");
+        await EnsureColumnExistsAsync(context, "Orders", "PaymentExpiresAt", "TEXT");
+        await EnsureColumnExistsAsync(context, "Orders", "PaidAt", "TEXT");
+        await EnsureColumnExistsAsync(context, "Orders", "PayOsOrderCode", "INTEGER");
+        await EnsureColumnExistsAsync(context, "PaymentTransactions", "PayOsOrderCode", "INTEGER");
+        await EnsureColumnExistsAsync(context, "PaymentTransactions", "PayOsPaymentLinkId", "TEXT");
+
+        try
+        {
+            if (context.Database.IsSqlite())
+            {
+                await context.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE IF NOT EXISTS PaymentTransactions (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        OrderId INTEGER NOT NULL,
+                        UserId INTEGER NULL,
+                        MomoOrderId TEXT NOT NULL,
+                        RequestId TEXT NOT NULL,
+                        TransactionId TEXT NOT NULL DEFAULT '',
+                        PaymentMethod TEXT NOT NULL DEFAULT 'MOMO',
+                        Amount NUMERIC NOT NULL,
+                        PaymentStatus TEXT NOT NULL DEFAULT 'Pending',
+                        PayUrl TEXT NOT NULL DEFAULT '',
+                        QrCodeUrl TEXT NOT NULL DEFAULT '',
+                        Deeplink TEXT NOT NULL DEFAULT '',
+                        CreatedAt TEXT NOT NULL,
+                        PaymentExpiresAt TEXT NOT NULL,
+                        PaidAt TEXT NULL,
+                        TransactionResponse TEXT NOT NULL DEFAULT '',
+                        FOREIGN KEY (OrderId) REFERENCES Orders(Id) ON DELETE CASCADE
+                    );
+                ");
+            }
+            else
+            {
+                await context.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE IF NOT EXISTS PaymentTransactions (
+                        Id INT AUTO_INCREMENT PRIMARY KEY,
+                        OrderId INT NOT NULL,
+                        UserId INT NULL,
+                        MomoOrderId VARCHAR(100) NOT NULL,
+                        RequestId VARCHAR(100) NOT NULL,
+                        TransactionId VARCHAR(100) NOT NULL DEFAULT '',
+                        PaymentMethod VARCHAR(30) NOT NULL DEFAULT 'MOMO',
+                        Amount DECIMAL(14,2) NOT NULL,
+                        PaymentStatus VARCHAR(30) NOT NULL DEFAULT 'Pending',
+                        PayUrl TEXT NOT NULL,
+                        QrCodeUrl TEXT NOT NULL,
+                        Deeplink TEXT NOT NULL,
+                        CreatedAt DATETIME NOT NULL,
+                        PaymentExpiresAt DATETIME NOT NULL,
+                        PaidAt DATETIME NULL,
+                        TransactionResponse LONGTEXT NOT NULL
+                    );
+                ");
+            }
+        }
+        catch
+        {
+            // Table creation fallback
+        }
 
         if (context.Users.Any())
         {

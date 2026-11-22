@@ -457,6 +457,9 @@ function MenuContent() {
                       src={img}
                       alt={name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/images/menu/ca-vien-chien-thap-cam-met-lon.jpg";
+                      }}
                     />
 
                     {/* Type Badge */}

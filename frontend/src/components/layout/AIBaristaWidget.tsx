@@ -17,6 +17,8 @@ import {
   ChevronDown,
   Minimize2,
   KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 export const AIBaristaWidget: React.FC = () => {
@@ -26,6 +28,8 @@ export const AIBaristaWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [showKeyBox, setShowKeyBox] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const [aiStatus, setAiStatus] = useState<{
     isConfigured: boolean;
     provider: string;
@@ -79,6 +83,7 @@ export const AIBaristaWidget: React.FC = () => {
     e.preventDefault();
     setSavingKey(true);
     setKeyStatusMsg(null);
+    setSaveSuccess(false);
     const clean = apiKeyInput.trim();
     const masked = clean.length > 8 ? `${clean.slice(0, 4)}...${clean.slice(-4)}` : "****";
 
@@ -90,6 +95,7 @@ export const AIBaristaWidget: React.FC = () => {
     try {
       const st = await api.configureAIApiKey({ apiKey: clean });
       setAiStatus(st);
+      setSaveSuccess(true);
       setKeyStatusMsg(`✅ Đã lưu & kết nối API Key (${st.maskedApiKey || masked})!`);
     } catch {
       // Even if old backend process doesn't have /api/ai/config yet, localStorage is saved and passed on every /api/ai/chat request
@@ -99,13 +105,13 @@ export const AIBaristaWidget: React.FC = () => {
         activeModel: "gemini-2.5-flash",
         maskedApiKey: clean ? masked : "",
       });
+      setSaveSuccess(true);
       setKeyStatusMsg(`✅ Đã lưu API Key (${masked}) và kích hoạt liên kết!`);
     } finally {
       setSavingKey(false);
       setTimeout(() => {
-        setShowKeyBox(false);
-        setKeyStatusMsg(null);
-      }, 1200);
+        setSaveSuccess(false);
+      }, 3000);
     }
   };
 
@@ -309,33 +315,65 @@ export const AIBaristaWidget: React.FC = () => {
           {showKeyBox && (
             <form
               onSubmit={handleSaveWidgetApiKey}
-              className="px-3.5 py-2.5 bg-[#FAF7F2] border-b border-[#EFE6DC] space-y-2 shrink-0"
+              className="px-3.5 py-2.5 bg-[#FAF7F2] border-b border-[#EFE6DC] space-y-2 shrink-0 animate-in fade-in duration-150"
             >
               <div className="flex items-center justify-between text-[11px] font-bold text-[#2D2522]">
                 <span>🔑 Liên kết Gemini / Groq / OpenAI API Key</span>
                 {aiStatus?.maskedApiKey && (
-                  <span className="text-emerald-700">Đang dùng: {aiStatus.maskedApiKey}</span>
+                  <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Đang dùng: {aiStatus.maskedApiKey}
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
-                <input
-                  type="password"
-                  placeholder="Dán API Key (AIzaSy... / AQ... / gsk_... / sk-...)"
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Dán API Key (AIzaSy... / AQ... / gsk_... / sk-...)"
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    className="w-full pl-2.5 pr-8 py-1.5 rounded-lg bg-white border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((p) => !p)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                    title={showPassword ? "Ẩn khóa bí mật" : "Hiện khóa"}
+                  >
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
                 <button
                   type="submit"
                   disabled={savingKey}
-                  className="px-3 py-1.5 rounded-lg bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] cursor-pointer active:scale-95 transition-all"
+                  className={`px-3 py-1.5 rounded-lg text-white text-xs font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 ${
+                    saveSuccess
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-[#6F4E37] hover:bg-[#4A3324]"
+                  }`}
                 >
-                  {savingKey ? "Đang lưu..." : "Lưu"}
+                  {savingKey ? (
+                    "Đang lưu..."
+                  ) : saveSuccess ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Đã lưu!</span>
+                    </>
+                  ) : (
+                    "Lưu"
+                  )}
                 </button>
               </div>
               {keyStatusMsg && (
-                <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1">
-                  {keyStatusMsg}
+                <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1 flex items-center justify-between">
+                  <span>{keyStatusMsg}</span>
+                  <button
+                    type="button"
+                    onClick={() => setKeyStatusMsg(null)}
+                    className="text-gray-400 hover:text-gray-600 ml-2"
+                  >
+                    ×
+                  </button>
                 </div>
               )}
             </form>

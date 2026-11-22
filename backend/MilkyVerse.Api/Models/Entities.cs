@@ -381,6 +381,8 @@ public class Order
     public int? UserId { get; set; }
     public User? User { get; set; }
 
+    public long? PayOsOrderCode { get; set; }
+
     [Column(TypeName = "decimal(12,2)")]
     public decimal Subtotal { get; set; }
 
@@ -423,12 +425,70 @@ public class Order
     [MaxLength(500)]
     public string? CancelReason { get; set; }
 
+    public DateTime? PaymentExpiresAt { get; set; }
+    public DateTime? PaidAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 
     public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
     public ICollection<OrderStatusHistory> StatusHistories { get; set; } = new List<OrderStatusHistory>();
+    public ICollection<PaymentTransaction> PaymentTransactions { get; set; } = new List<PaymentTransaction>();
     public DeliveryAssignment? DeliveryAssignment { get; set; }
+}
+
+public class PaymentTransaction
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int OrderId { get; set; }
+    public Order? Order { get; set; }
+
+    public int? UserId { get; set; }
+    public User? User { get; set; }
+
+    [Required]
+    [MaxLength(100)]
+    public string MomoOrderId { get; set; } = string.Empty;
+
+    public long? PayOsOrderCode { get; set; }
+
+    [MaxLength(100)]
+    public string? PayOsPaymentLinkId { get; set; }
+
+    [Required]
+    [MaxLength(100)]
+    public string RequestId { get; set; } = string.Empty;
+
+    [MaxLength(100)]
+    public string TransactionId { get; set; } = string.Empty;
+
+    [Required]
+    [MaxLength(30)]
+    public string PaymentMethod { get; set; } = "MOMO";
+
+    [Column(TypeName = "decimal(14,2)")]
+    public decimal Amount { get; set; }
+
+    [Required]
+    [MaxLength(30)]
+    public string PaymentStatus { get; set; } = "Pending"; // Pending, Success, Failed, Cancelled, Expired, Refunded
+
+    [MaxLength(2000)]
+    public string PayUrl { get; set; } = string.Empty;
+
+    [MaxLength(2000)]
+    public string QrCodeUrl { get; set; } = string.Empty;
+
+    [MaxLength(2000)]
+    public string Deeplink { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime PaymentExpiresAt { get; set; }
+    public DateTime? PaidAt { get; set; }
+
+    public string TransactionResponse { get; set; } = string.Empty;
 }
 
 public class OrderDetail

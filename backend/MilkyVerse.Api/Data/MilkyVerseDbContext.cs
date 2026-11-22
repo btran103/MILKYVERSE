@@ -33,6 +33,7 @@ public class MilkyVerseDbContext : DbContext
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<EmailVerification> EmailVerifications => Set<EmailVerification>();
     public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -175,6 +176,20 @@ public class MilkyVerseDbContext : DbContext
             .HasOne(m => m.Session)
             .WithMany(s => s.Messages)
             .HasForeignKey(m => m.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PaymentTransaction>()
+            .HasIndex(pt => pt.RequestId)
+            .IsUnique();
+
+        modelBuilder.Entity<PaymentTransaction>()
+            .HasIndex(pt => pt.MomoOrderId)
+            .IsUnique();
+
+        modelBuilder.Entity<PaymentTransaction>()
+            .HasOne(pt => pt.Order)
+            .WithMany(o => o.PaymentTransactions)
+            .HasForeignKey(pt => pt.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

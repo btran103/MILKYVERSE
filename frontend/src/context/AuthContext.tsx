@@ -46,6 +46,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     localStorage.removeItem("milky_token");
     localStorage.removeItem("milky_user");
+    localStorage.removeItem("milky_cart");
+    localStorage.removeItem("milky_cart_guest");
   }, []);
 
   useEffect(() => {

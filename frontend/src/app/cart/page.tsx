@@ -286,7 +286,7 @@ export default function CartPage() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="MILKYNEW, #MK2095F54..."
+                  placeholder="Nhập mã ưu đãi của bạn..."
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                   className="flex-1 px-3 py-2 text-xs uppercase font-bold rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] focus:outline-none focus:border-[#6F4E37]"
@@ -297,34 +297,6 @@ export default function CartPage() {
                   className="px-4 py-2 bg-[#6F4E37] text-white text-xs font-bold rounded-xl hover:bg-[#4A3324] disabled:opacity-50 transition-colors"
                 >
                   Áp dụng
-                </button>
-              </div>
-
-              {/* Quick voucher chips & random generator */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setPromoCode("#MK2095F54")}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#FAF7F2] border border-[#EFE6DC] text-[#6F4E37] hover:border-[#6F4E37]"
-                >
-                  #MK2095F54 (-25k)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPromoCode("MILKYNEW")}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#FAF7F2] border border-[#EFE6DC] text-[#6F4E37] hover:border-[#6F4E37]"
-                >
-                  MILKYNEW (-15%)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const hex = Math.floor(1000000 + Math.random() * 9000000).toString(16).toUpperCase();
-                    setPromoCode(`#MK${hex}`);
-                  }}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100"
-                >
-                  🎲 Tạo mã ngẫu nhiên
                 </button>
               </div>
 

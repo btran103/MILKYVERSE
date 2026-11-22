@@ -259,6 +259,28 @@ export interface OrderStatusHistory {
   createdAt: string;
 }
 
+export interface PaymentTransaction {
+  id: number;
+  orderId: number;
+  orderCode: string;
+  momoOrderId: string;
+  requestId: string;
+  transactionId: string;
+  paymentMethod: string;
+  amount: number;
+  paymentStatus: "Pending" | "Success" | "Failed" | "Cancelled" | "Expired" | "Refunded" | string;
+  payUrl: string;
+  qrCodeUrl: string;
+  deeplink: string;
+  createdAt: string;
+  paymentExpiresAt: string;
+  paidAt?: string;
+  remainingSeconds: number;
+  serverTimeUtc: string;
+  isExpired: boolean;
+  message?: string;
+}
+
 export interface OrderResponse {
   id: number;
   orderCode: string;
@@ -277,8 +299,13 @@ export interface OrderResponse {
   cancelReason?: string;
   canCancel?: boolean;
   createdAt: string;
+  paymentExpiresAt?: string;
+  paidAt?: string;
+  remainingPaymentSeconds?: number;
+  serverTimeUtc?: string;
   items: OrderDetailResponse[];
   statusHistories?: OrderStatusHistory[];
+  paymentTransactions?: PaymentTransaction[];
 
   // Delivery & Shipper info
   shipperId?: number;
@@ -412,3 +439,17 @@ export interface Promotion {
   minOrderValue: number;
   isActive: boolean;
 }
+
+export interface SePayQrResponse {
+  orderId: number;
+  orderCode: string;
+  amount: number;
+  description: string;
+  bank: string;
+  accountNumber: string;
+  accountName: string;
+  qrUrl: string;
+  paymentStatus: string;
+  expiredSeconds: number;
+}
+

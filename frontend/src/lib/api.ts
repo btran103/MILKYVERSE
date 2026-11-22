@@ -8,6 +8,7 @@ import {
   DIYQuoteResponse,
   Ingredient,
   OrderResponse,
+  PaymentTransaction,
   Product,
   ProductDetail,
   ProductReview,
@@ -19,6 +20,7 @@ import {
   SuggestedDrink,
   Topping,
   User,
+  SePayQrResponse,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -138,11 +140,23 @@ export const api = {
       body: JSON.stringify({ code, orderSubtotal: subtotal }),
     }),
 
-  getNgrokTunnel: () =>
-    request<{ isRunning: boolean; publicUrl: string | null; webhookUrl: string }>("/orders/ngrok-tunnel"),
+  // MoMo Real-Time Online Payment (2-Minute Strict Validity)
+  createMomoPayment: (payload: { orderId: number; returnUrl?: string; forceNewSession?: boolean }) =>
+    request<PaymentTransaction>("/payments/momo/create", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
-  triggerPaymentWebhook: (payload: { orderId?: number; orderCode?: string; amount?: number; transactionRef?: string; provider?: string }) =>
-    request<OrderResponse>("/orders/payment-webhook", {
+  getMomoPaymentStatus: (orderId: number) =>
+    request<PaymentTransaction>(`/payments/momo/status/${orderId}`),
+
+  verifyMomoReturn: (queryParams: Record<string, string>) => {
+    const q = new URLSearchParams(queryParams).toString();
+    return request<PaymentTransaction>(`/payments/momo/return?${q}`);
+  },
+
+  executeMomoAction: (payload: { requestId: string; action: "pay" | "cancel" | "fail" }) =>
+    request<PaymentTransaction>("/payments/momo/sandbox-execute", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -226,4 +240,10 @@ export const api = {
     request<boolean>(`/delivery/orders/${orderId}/status`, { method: "PUT", body: JSON.stringify(payload) }),
   reconcileCod: (orderIds: number[]) =>
     request<boolean>("/delivery/reconcile-cod", { method: "POST", body: JSON.stringify({ orderIds }) }),
+
+  // SePay (sepay.vn - TPBank)
+  getSePayQr: (orderId: number) =>
+    request<SePayQrResponse>(`/payments/sepay/qr/${orderId}`),
+  getSePayStatus: (orderId: number) =>
+    request<SePayQrResponse>(`/payments/sepay/status/${orderId}`),
 };
