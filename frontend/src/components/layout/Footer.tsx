@@ -55,8 +55,8 @@ const POLICIES: Record<string, PolicyContent> = {
         body: "Nếu đồ uống bị đổ vỡ, tràn nắp, sai tỷ lệ đá/đường so với ghi chú hoặc món ăn vặt bị nguội/sai yêu cầu, cửa hàng sẽ pha chế và giao lại phần mới hoàn toàn miễn phí trong vòng 30 phút.",
       },
       {
-        heading: "2. Hủy đơn trong vòng 2 phút",
-        body: "Hệ thống hỗ trợ khách hàng tự hủy đơn trực tiếp trên website trong 2 phút đầu tiên kể từ khi đặt hàng (trước khi quầy bắt đầu pha chế). Tiền thanh toán sẽ được hoàn về tài khoản trong 24 giờ.",
+        heading: "2. Hủy đơn & Thanh toán COD / Online",
+        body: "Khách hàng có thể hủy đơn trước khi quầy bắt đầu pha chế. Đơn thanh toán tiền mặt (COD) không bị tự hủy sau 2 phút và chỉ thanh toán khi nhận hàng; thanh toán MoMo áp dụng phiên giao dịch 2 phút.",
       },
       {
         heading: "3. Hotline hỗ trợ 24/7",

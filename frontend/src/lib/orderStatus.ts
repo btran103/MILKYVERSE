@@ -98,8 +98,8 @@ export function getPaymentStatusMeta(paymentStatus?: string, paymentMethod?: str
 
   if (isCod) {
     return {
-      label: "Chưa thanh toán (Thu tiền mặt khi giao)",
-      badgeClass: "bg-amber-100 text-amber-800",
+      label: "Chưa thanh toán",
+      badgeClass: "bg-amber-100 text-amber-800 border border-amber-200",
       isPaid: false,
       isExpired: false,
     };

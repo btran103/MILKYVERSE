@@ -1840,6 +1840,8 @@ public class ToolExecutionService : IToolExecutionService
         var query = _db.Orders
             .Include(o => o.OrderDetails)
                 .ThenInclude(od => od.Options)
+            .Include(o => o.DeliveryAssignment)
+                .ThenInclude(da => da!.Shipper)
             .Include(o => o.StatusHistories)
             .AsQueryable();
 

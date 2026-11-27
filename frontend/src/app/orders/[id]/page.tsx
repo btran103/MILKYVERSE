@@ -6,7 +6,7 @@ import React, { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { OrderResponse, SePayQrResponse } from "@/types";
+import { OrderResponse, PaymentTransaction, SePayQrResponse } from "@/types";
 import { useCart } from "@/context/CartContext";
 import { getDistinctOrderItemImage } from "@/lib/orderImageHelper";
 import { getOrderStatusMeta, getPaymentStatusMeta, isCodPayment } from "@/lib/orderStatus";
@@ -30,6 +30,8 @@ import {
   Coffee,
   Banknote,
   History,
+  ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 
 export default function OrderDetailPage({
@@ -42,6 +44,8 @@ export default function OrderDetailPage({
   const { addItem } = useCart();
   const [order, setOrder] = useState<OrderResponse | null>(null);
   const [sePaySession, setSePaySession] = useState<SePayQrResponse | null>(null);
+  const [momoSession, setMomoSession] = useState<PaymentTransaction | null>(null);
+  const [momoRefreshing, setMomoRefreshing] = useState(false);
   const [remainingPaymentSecs, setRemainingPaymentSecs] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,6 +142,14 @@ export default function OrderDetailPage({
           }
           setSePaySession(qr);
           setRemainingPaymentSecs(qr.expiredSeconds ?? 900);
+        } else if (data.paymentMethod === "MOMO" && data.paymentStatus !== "Paid" && data.paymentStatus !== "Success" && data.status !== "Cancelled") {
+          try {
+            const momoTx = await api.getMomoPaymentStatus(orderIdNum);
+            setMomoSession(momoTx);
+            setRemainingPaymentSecs(momoTx.remainingSeconds ?? data.remainingPaymentSeconds ?? 0);
+          } catch {
+            // fallback to order timer
+          }
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : "Không tìm thấy đơn hàng.";
@@ -156,11 +168,20 @@ export default function OrderDetailPage({
     }
 
     const tick = setInterval(() => {
-      setRemainingPaymentSecs((prev) => (prev > 0 ? prev - 1 : 0));
+      setRemainingPaymentSecs((prev) => {
+        if (prev <= 1) {
+          if (order.paymentMethod === "MOMO") {
+            api.getMomoPaymentStatus(order.id).then(setMomoSession).catch(() => {});
+            api.getOrderById(order.id).then(setOrder).catch(() => {});
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(tick);
-  }, [order?.paymentMethod, order?.paymentStatus, order?.status]);
+  }, [order?.id, order?.paymentMethod, order?.paymentStatus, order?.status]);
 
   // Live order tracking polling while active (2s for online payment awaiting confirmation, 5s for fulfillment & shipper delivery)
   useEffect(() => {
@@ -267,6 +288,26 @@ export default function OrderDetailPage({
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
+  const handleCreateNewMomoSession = async () => {
+    if (!order) return;
+    setMomoRefreshing(true);
+    try {
+      const tx = await api.createMomoPayment({
+        orderId: order.id,
+        returnUrl: `${window.location.origin}/orders/${order.id}`,
+        forceNewSession: true,
+      });
+      setMomoSession(tx);
+      setRemainingPaymentSecs(tx.remainingSeconds ?? 120);
+      const updated = await api.getOrderById(order.id);
+      setOrder(updated);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Không thể tạo phiên thanh toán MoMo mới.");
+    } finally {
+      setMomoRefreshing(false);
+    }
+  };
+
   const handleConfirmCancel = async () => {
     setCancelLoading(true);
     const finalReason = cancelReason === "Khác" ? customReason.trim() || "Khách hàng đổi ý" : cancelReason;
@@ -326,7 +367,39 @@ export default function OrderDetailPage({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Customer Cancel Button when allowed — NO fake 2-min auto-cancel countdown on COD */}
+          {/* COD Payment Notice replacing the old 2-minute countdown timer */}
+          {isCod ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#6F4E37] bg-[#FAF7F2] border border-[#EFE6DC] px-3 py-1.5 rounded-xl">
+                <Banknote className="w-3.5 h-3.5 text-[#6F4E37]" />
+                <span>Thanh toán tiền mặt khi nhận hàng</span>
+              </span>
+              <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${paymentMeta.badgeClass}`}>
+                {paymentMeta.label}
+              </span>
+            </div>
+          ) : (
+            !paymentMeta.isPaid &&
+            order.paymentMethod === "MOMO" &&
+            !isCancelled && (
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-mono font-bold px-3 py-1.5 rounded-xl border ${
+                  remainingPaymentSecs <= 0 || paymentMeta.isExpired || momoSession?.isExpired
+                    ? "bg-red-50 text-red-700 border-red-200"
+                    : "bg-pink-50 text-[#A50064] border-pink-200 animate-pulse"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>
+                  {remainingPaymentSecs <= 0 || paymentMeta.isExpired || momoSession?.isExpired
+                    ? "Phiên MoMo đã hết hạn (00:00)"
+                    : `MoMo còn hiệu lực: ${formatTime(remainingPaymentSecs)}`}
+                </span>
+              </span>
+            )
+          )}
+
+          {/* Customer Cancel Button when allowed — NO 2-min auto-cancel countdown on COD */}
           {canCancelNow && (
             <button
               onClick={() => setShowCancelModal(true)}
@@ -797,6 +870,55 @@ export default function OrderDetailPage({
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping shrink-0" />
                 <span>Đang tự động lắng nghe giao dịch TPBank qua SePay...</span>
               </div>
+            </div>
+          )}
+
+          {/* MoMo 2-Minute Payment Session Card (kept completely separate from COD) */}
+          {!paymentMeta.isPaid && order.paymentMethod === "MOMO" && !isCancelled && (
+            <div className="bg-white p-6 rounded-3xl border-2 border-[#A50064] shadow-lg space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-pink-100">
+                <div className="flex items-center gap-2 text-xs font-black text-[#A50064]">
+                  <Clock className="w-4 h-4" />
+                  <span>Cổng Thanh Toán Ví MoMo</span>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-pink-50 text-[#A50064] font-mono font-bold text-xs border border-pink-200">
+                  {formatTime(remainingPaymentSecs)}
+                </span>
+              </div>
+
+              {remainingPaymentSecs <= 0 || paymentMeta.isExpired || momoSession?.isExpired ? (
+                <div className="space-y-3">
+                  <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                    Phiên thanh toán MoMo (02:00) đã hết hạn. Vui lòng tạo yêu cầu thanh toán MoMo mới để tiếp tục.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCreateNewMomoSession}
+                    disabled={momoRefreshing}
+                    className="w-full py-3 rounded-2xl bg-[#A50064] text-white font-bold text-xs hover:bg-[#880052] transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${momoRefreshing ? "animate-spin" : ""}`} />
+                    <span>{momoRefreshing ? "Đang tạo phiên mới..." : "Tạo Phiên Thanh Toán MoMo Mới (02:00)"}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 text-xs">
+                  <p className="text-[#786C65]">
+                    Giao dịch MoMo có hiệu lực chính xác <strong>02:00</strong>. Vui lòng hoàn tất thanh toán trước khi hết giờ.
+                  </p>
+                  {momoSession?.payUrl && (
+                    <a
+                      href={momoSession.payUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3 rounded-2xl bg-[#A50064] text-white font-bold text-xs hover:bg-[#880052] transition-colors flex items-center justify-center gap-2 shadow-md"
+                    >
+                      <span>Mở Cổng Thanh Toán MoMo ({order.totalAmount.toLocaleString("vi-VN")}đ)</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

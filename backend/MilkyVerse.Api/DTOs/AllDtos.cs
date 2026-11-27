@@ -599,9 +599,11 @@ public class ShipperDashboardDto
     public int TotalAssignedOrders { get; set; }
     public int InTransitOrders { get; set; }
     public int DeliveredToday { get; set; }
+    public int AvailableOrdersCount { get; set; }
     public decimal TotalCodCollected { get; set; }
     public decimal TotalCodPendingReconcile { get; set; }
     public List<OrderResponse> Orders { get; set; } = new();
+    public List<OrderResponse> AvailableOrders { get; set; } = new();
 }
 
 public class ReconcileCodRequest

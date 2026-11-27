@@ -45,6 +45,36 @@ public class DeliveryController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("available")]
+    [Authorize(Roles = "DeliveryStaff,Manager,Admin")]
+    public async Task<IActionResult> GetAvailableOrders()
+    {
+        var result = await _deliveryService.GetReadyForPickupPoolAsync();
+        return Ok(result);
+    }
+
+    [HttpPost("orders/{orderId:int}/claim")]
+    [Authorize(Roles = "DeliveryStaff")]
+    public async Task<IActionResult> ClaimOrder(int orderId, [FromBody] UpdateDeliveryStatusRequest? request = null)
+    {
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdStr, out var shipperId))
+        {
+            return Unauthorized(ApiResponse<bool>.Fail("Không xác định được danh tính shipper."));
+        }
+
+        var result = await _deliveryService.ClaimOrderForDeliveryAsync(shipperId, orderId, request?.Notes);
+        if (!result.Success)
+        {
+            if (result.Message.StartsWith("FORBIDDEN:", StringComparison.Ordinal))
+            {
+                return StatusCode(403, result);
+            }
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
     [HttpPost("assign")]
     [Authorize(Roles = "Admin,Manager,Staff")]
     public async Task<IActionResult> AssignShipper([FromBody] AssignShipperRequest request)

@@ -807,7 +807,8 @@ public static class InProcessTestRunner
             ("T09_DeliveryFailed_DoesNotMarkPaid_AndRecordsReason", () => cod.T09_DeliveryFailed_DoesNotMarkPaid_AndRecordsReason()),
             ("T10_UnassignedShipper_ForbiddenFromUpdatingAnotherShippersOrder", () => cod.T10_UnassignedShipper_ForbiddenFromUpdatingAnotherShippersOrder()),
             ("T11_MomoOrder_ExpiresAfter2Minutes_IndependentlyFromCod", () => cod.T11_MomoOrder_ExpiresAfter2Minutes_IndependentlyFromCod()),
-            ("T12_PreventsInvalidTransitions_AndDuplicatePaymentConfirmation", () => cod.T12_PreventsInvalidTransitions_AndDuplicatePaymentConfirmation())
+            ("T12_PreventsInvalidTransitions_AndDuplicatePaymentConfirmation", () => cod.T12_PreventsInvalidTransitions_AndDuplicatePaymentConfirmation()),
+            ("T13_MomoOrder_ValidIpnWithin2Minutes_ConfirmsPaymentSuccessfully", () => cod.T13_MomoOrder_ValidIpnWithin2Minutes_ConfirmsPaymentSuccessfully())
         };
 
         foreach (var (name, run) in legacyTests.Concat(agentTests).Concat(codTests))

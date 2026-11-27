@@ -262,13 +262,13 @@ export default function OrdersListPage() {
             Lịch Sử Đơn Hàng Của Bạn
           </h1>
           <p className="text-xs text-[#786C65] mt-1">
-            Theo dõi hành trình, hủy đơn trong vòng 2 phút hoặc chat phản hồi trực tiếp với Quản lý
+            Theo dõi hành trình giao hàng, trạng thái thanh toán hoặc chat phản hồi trực tiếp với Quản lý
           </p>
         </div>
 
         <div className="flex items-center gap-2 bg-[#FAF7F2] border border-[#EFE6DC] px-3.5 py-2 rounded-2xl text-xs text-[#6F4E37] font-semibold">
           <Clock className="w-4 h-4 text-[#C5A059] shrink-0" />
-          <span>Chính sách: Khách có thể tự hủy đơn trong vòng 2 phút trước khi pha chế</span>
+          <span>Chính sách: Đơn COD thanh toán khi nhận hàng; khách có thể hủy trước khi cửa hàng pha chế</span>
         </div>
       </div>
 
@@ -415,13 +415,17 @@ export default function OrdersListPage() {
                         {statusMeta.label}
                       </span>
 
-                      {/* Online payment expiry timer shown strictly for online methods (never COD!) */}
-                      {!isCod && o.paymentStatus === "Pending" && onlineRemaining > 0 && (
+                      {/* COD shows cash-on-delivery notice; Online payment shows countdown strictly for MOMO/SEPAY */}
+                      {isCod ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-[#6F4E37] bg-[#FAF7F2] border border-[#EFE6DC] px-2.5 py-0.5 rounded-full">
+                          <span>Thanh toán tiền mặt khi nhận hàng</span>
+                        </span>
+                      ) : o.paymentStatus === "Pending" && onlineRemaining > 0 ? (
                         <span className="flex items-center gap-1 text-[11px] font-black text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
                           <Clock className="w-3 h-3" />
                           <span>Thanh toán online còn: {formatCountdown(onlineRemaining)}</span>
                         </span>
-                      )}
+                      ) : null}
                     </div>
 
                     <p className="text-xs text-[#786C65]">
@@ -577,7 +581,7 @@ export default function OrdersListPage() {
         </div>
       )}
 
-      {/* 4. Modal Hủy Đơn Hàng (Trong 2 phút) */}
+      {/* 4. Modal Hủy Đơn Hàng */}
       {cancellingOrder && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-[#EFE6DC] shadow-2xl space-y-4">
@@ -595,7 +599,7 @@ export default function OrdersListPage() {
             </div>
 
             <p className="text-xs text-[#786C65]">
-              Đơn hàng của bạn đang trong thời hạn 2 phút cho phép tự hủy. Vui lòng cho MilkyVerse biết lý do hủy đơn:
+              Đơn hàng của bạn chưa bước vào giai đoạn pha chế. Vui lòng cho MilkyVerse biết lý do hủy đơn:
             </p>
 
             {cancelError && (

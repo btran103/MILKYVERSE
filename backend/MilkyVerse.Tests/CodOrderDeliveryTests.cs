@@ -424,4 +424,60 @@ public class CodOrderDeliveryTests
         var txCount = await db.PaymentTransactions.CountAsync(pt => pt.OrderId == orderId);
         Assert.Equal(1, txCount);
     }
+
+    // Test 13: Đơn MoMo thanh toán hợp lệ trong 2 phút được xác nhận thành công, không ảnh hưởng COD
+    [Fact]
+    public async Task T13_MomoOrder_ValidIpnWithin2Minutes_ConfirmsPaymentSuccessfully()
+    {
+        using var db = CreateDb();
+        var (customer, _, _, _, product) = await SeedActorsAndProductAsync(db);
+        var orderService = new OrderService(db);
+
+        var momoOrderRes = await orderService.CreateOrderAsync(customer.Id, MakeOrderRequest(product.Id, product.Name, "MOMO"));
+        Assert.True(momoOrderRes.Success);
+        Assert.Equal(OrderWorkflow.StatusPending, momoOrderRes.Data!.Status);
+        Assert.InRange(momoOrderRes.Data.RemainingPaymentSeconds, 1, 120);
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Momo:PartnerCode"] = "MOMO",
+                ["Momo:AccessKey"] = "test-access",
+                ["Momo:SecretKey"] = "test-secret"
+            })
+            .Build();
+        var httpFactoryMock = new Mock<IHttpClientFactory>();
+        httpFactoryMock.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient());
+
+        var momoService = new MomoPaymentService(db, config, httpFactoryMock.Object, NullLogger<MomoPaymentService>.Instance);
+        var txRes = await momoService.CreateMomoPaymentAsync(customer.Id, new CreateMomoPaymentRequest { OrderId = momoOrderRes.Data.Id });
+        Assert.True(txRes.Success);
+        Assert.False(txRes.Data!.IsExpired);
+        Assert.InRange(txRes.Data.RemainingSeconds, 1, 120);
+
+        var ipn = new MomoIpnCallbackRequest
+        {
+            PartnerCode = "MOMO",
+            OrderId = txRes.Data.MomoOrderId,
+            RequestId = txRes.Data.RequestId,
+            Amount = (long)Math.Round(momoOrderRes.Data.TotalAmount),
+            OrderInfo = $"Thanh toan {momoOrderRes.Data.OrderCode}",
+            OrderType = "momo_wallet",
+            TransId = 99887766,
+            ResultCode = 0,
+            Message = "Thành công.",
+            PayType = "qr",
+            ResponseTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            ExtraData = ""
+        };
+        ipn.Signature = momoService.ComputeHmacSha256(momoService.BuildIpnSignatureRawData(ipn, "test-access"), "test-secret");
+
+        var ipnRes = await momoService.ProcessIpnCallbackAsync(ipn, skipSignatureCheck: false);
+        Assert.True(ipnRes.Success);
+        Assert.Equal("Success", ipnRes.Data!.PaymentStatus);
+
+        var updatedOrder = await orderService.GetOrderByIdAsync(momoOrderRes.Data.Id, customer.Id);
+        Assert.Equal("Confirmed", updatedOrder.Data!.Status);
+        Assert.Equal("Success", updatedOrder.Data.PaymentStatus);
+    }
 }

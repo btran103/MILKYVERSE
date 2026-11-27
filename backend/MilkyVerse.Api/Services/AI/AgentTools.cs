@@ -613,7 +613,11 @@ public class GetMyOrdersTool : IAgentTool
                 paymentStatus = o.PaymentStatus,
                 paymentMethod = o.PaymentMethod,
                 totalAmount = o.TotalAmount,
+                shipperName = o.ShipperName,
+                shipperPhone = o.ShipperPhone,
+                deliveryStatus = o.DeliveryStatus,
                 createdAt = o.CreatedAt,
+                updatedAt = o.UpdatedAt,
                 orderUrl = $"/orders/{o.Id}",
                 items = o.Items.Select(i => $"{i.Quantity}x {i.ProductName} (Size {i.Size})")
             })
@@ -674,7 +678,11 @@ public class GetOrderStatusTool : IAgentTool
             paymentStatus = matched.PaymentStatus,
             paymentMethod = matched.PaymentMethod,
             totalAmount = matched.TotalAmount,
+            shipperName = matched.ShipperName,
+            shipperPhone = matched.ShipperPhone,
+            deliveryStatus = matched.DeliveryStatus,
             createdAt = matched.CreatedAt,
+            updatedAt = matched.UpdatedAt,
             orderUrl = $"/orders/{matched.Id}",
             items = matched.Items.Select(i => new
             {

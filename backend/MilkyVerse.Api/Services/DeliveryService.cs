@@ -10,6 +10,8 @@ public interface IDeliveryService
 {
     Task<ApiResponse<ShipperDashboardDto>> GetShipperDashboardAsync(int shipperId);
     Task<ApiResponse<List<OrderResponse>>> GetAssignedOrdersAsync(int shipperId);
+    Task<ApiResponse<List<OrderResponse>>> GetReadyForPickupPoolAsync();
+    Task<ApiResponse<bool>> ClaimOrderForDeliveryAsync(int shipperId, int orderId, string? notes = null);
     Task<ApiResponse<bool>> AssignShipperAsync(AssignShipperRequest request, int? actorUserId = null, string? actorName = null, string? actorRole = null);
     Task<ApiResponse<bool>> UpdateDeliveryStatusAsync(int shipperId, int orderId, UpdateDeliveryStatusRequest request);
     Task<ApiResponse<bool>> ReconcileCodAsync(ReconcileCodRequest request);
@@ -50,18 +52,119 @@ public class DeliveryService : IDeliveryService
         decimal codPendingReconcile = assignments.Where(da => da.IsCodCollected && !da.CodReconciled).Sum(da => da.CodAmount);
 
         var orders = assignments.Select(da => OrderService.MapOrderToResponse(da.Order!)).ToList();
+        var availableOrdersRes = await GetReadyForPickupPoolAsync();
+        var availableOrders = availableOrdersRes.Data ?? new List<OrderResponse>();
 
         var dto = new ShipperDashboardDto
         {
             TotalAssignedOrders = totalAssigned,
             InTransitOrders = inTransit,
             DeliveredToday = deliveredToday,
+            AvailableOrdersCount = availableOrders.Count,
             TotalCodCollected = codCollected,
             TotalCodPendingReconcile = codPendingReconcile,
-            Orders = orders
+            Orders = orders,
+            AvailableOrders = availableOrders
         };
 
         return ApiResponse<ShipperDashboardDto>.Ok(dto);
+    }
+
+    public async Task<ApiResponse<List<OrderResponse>>> GetReadyForPickupPoolAsync()
+    {
+        var readyOrders = await _context.Orders
+            .Include(o => o.OrderDetails)
+                .ThenInclude(od => od.Options)
+            .Include(o => o.OrderDetails)
+                .ThenInclude(od => od.Product)
+            .Include(o => o.DeliveryAssignment)
+            .Include(o => o.StatusHistories)
+            .Include(o => o.PaymentTransactions)
+            .Where(o => o.Status == OrderWorkflow.StatusReadyForPickup && o.DeliveryAssignment == null)
+            .OrderByDescending(o => o.UpdatedAt ?? o.CreatedAt)
+            .ToListAsync();
+
+        var mapped = readyOrders.Select(OrderService.MapOrderToResponse).ToList();
+        return ApiResponse<List<OrderResponse>>.Ok(mapped);
+    }
+
+    public async Task<ApiResponse<bool>> ClaimOrderForDeliveryAsync(int shipperId, int orderId, string? notes = null)
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            var shipper = await _context.Users.FirstOrDefaultAsync(u => u.Id == shipperId && u.Role == "DeliveryStaff" && u.IsActive);
+            if (shipper == null)
+            {
+                return ApiResponse<bool>.Fail("Không tìm thấy tài khoản shipper đang hoạt động.");
+            }
+
+            var order = await _context.Orders
+                .Include(o => o.DeliveryAssignment)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
+            if (order == null)
+            {
+                return ApiResponse<bool>.Fail("Không tìm thấy đơn hàng.");
+            }
+
+            if (order.DeliveryAssignment != null && order.DeliveryAssignment.ShipperId != shipperId)
+            {
+                return ApiResponse<bool>.Fail("FORBIDDEN: Đơn hàng này đã được nhận hoặc phân công cho shipper khác.");
+            }
+
+            if (order.Status != OrderWorkflow.StatusReadyForPickup && order.Status != OrderWorkflow.StatusDeliveryFailed)
+            {
+                return ApiResponse<bool>.Fail($"Đơn hàng chưa sẵn sàng để nhận giao (trạng thái hiện tại: {order.Status}).");
+            }
+
+            var now = DateTime.UtcNow;
+            bool isCod = OrderWorkflow.IsCod(order.PaymentMethod);
+
+            if (order.DeliveryAssignment == null)
+            {
+                order.DeliveryAssignment = new DeliveryAssignment
+                {
+                    OrderId = order.Id,
+                    ShipperId = shipperId,
+                    AssignedAt = now,
+                    PickedUpAt = now,
+                    Status = "InTransit",
+                    CodAmount = isCod ? order.TotalAmount : 0,
+                    Notes = string.IsNullOrWhiteSpace(notes) ? "Shipper tự nhận đơn sẵn sàng giao" : notes.Trim()
+                };
+                _context.DeliveryAssignments.Add(order.DeliveryAssignment);
+            }
+            else
+            {
+                order.DeliveryAssignment.Status = "InTransit";
+                order.DeliveryAssignment.PickedUpAt ??= now;
+                order.DeliveryAssignment.FailureReason = string.Empty;
+            }
+
+            order.Status = OrderWorkflow.StatusDelivering;
+            order.UpdatedAt = now;
+
+            _context.OrderStatusHistories.Add(new OrderStatusHistory
+            {
+                OrderId = order.Id,
+                Status = OrderWorkflow.StatusDelivering,
+                Note = $"Shipper {shipper.FullName} ({shipper.PhoneNumber}) đã nhận đơn và bắt đầu giao hàng.",
+                ChangedByUserId = shipper.Id,
+                ChangedByName = shipper.FullName,
+                ChangedByRole = "DeliveryStaff",
+                CreatedAt = now
+            });
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return ApiResponse<bool>.Ok(true, $"Đã nhận đơn #{order.OrderCode} và chuyển sang Đang giao hàng!");
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return ApiResponse<bool>.Fail($"Lỗi khi nhận đơn giao hàng: {ex.Message}");
+        }
     }
 
     public async Task<ApiResponse<List<OrderResponse>>> GetAssignedOrdersAsync(int shipperId)

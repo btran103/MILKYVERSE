@@ -309,7 +309,23 @@ export default function CheckoutPage() {
         return;
       }
 
-      // COD payment: Xác nhận đơn ngay với tiền mặt khi nhận hàng
+      // MoMo payment: Tạo phiên giao dịch 2 phút trên Backend rồi mở trang chi tiết đơn hàng
+      if (paymentMethod === "MOMO") {
+        try {
+          await api.createMomoPayment({
+            orderId: orderRes.id,
+            returnUrl: `${window.location.origin}/orders/${orderRes.id}`,
+          });
+        } catch (momoErr) {
+          console.warn("Khởi tạo phiên MoMo trên trang đơn hàng:", momoErr);
+        }
+        clearCart();
+        sessionStorage.removeItem("milky_promo_code");
+        router.push(`/orders/${orderRes.id}`);
+        return;
+      }
+
+      // COD payment: Xác nhận đơn ngay với tiền mặt khi nhận hàng (không có thời hạn 2 phút)
       confetti({
         particleCount: 120,
         spread: 70,
@@ -362,7 +378,7 @@ export default function CheckoutPage() {
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-[10px]">
           <div className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs">
             <span className="font-black text-[#6F4E37] block">1. Khách Hàng</span>
-            <span className="text-[#786C65] mt-0.5 block">Tạo đơn & CK trong 2 phút</span>
+            <span className="text-[#786C65] mt-0.5 block">Đặt COD hoặc Thanh toán Online</span>
           </div>
           <div className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs">
             <span className="font-black text-[#6F4E37] block">2. NV Quầy</span>
@@ -500,7 +516,7 @@ export default function CheckoutPage() {
               <span>2. Phương Thức Thanh Toán</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button
                 type="button"
                 onClick={() => setPaymentMethod("SEPAY")}
@@ -512,12 +528,33 @@ export default function CheckoutPage() {
               >
                 <div className="flex items-center gap-2">
                   <QrCode className="w-5 h-5 text-[#2563EB] shrink-0" />
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#2563EB] text-white">Khuyên dùng • Tiền thật TPBank</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#2563EB] text-white">Khuyên dùng • TPBank</span>
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-[#2D2522]">Thanh toán SePay (VietQR TPBank)</h4>
+                  <h4 className="font-bold text-xs text-[#2D2522]">Thanh toán SePay (VietQR)</h4>
                   <p className="text-[10px] text-[#786C65] mt-0.5">
-                    Quét mã VietQR bằng mọi app ngân hàng. Tiền thật vào thẳng tài khoản TPBank, SePay tự động nổ đơn ngay lập tức!
+                    Quét mã VietQR bằng mọi app ngân hàng, tự động duyệt đơn ngay!
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentMethod("MOMO")}
+                className={`p-4 rounded-2xl border text-left transition-all flex flex-col gap-2 ${
+                  paymentMethod === "MOMO"
+                    ? "border-[#A50064] bg-pink-50/50 shadow-sm ring-2 ring-[#A50064]"
+                    : "border-[#EFE6DC] bg-white hover:bg-[#FAF7F2]"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-[#A50064] shrink-0" />
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#A50064] text-white">Phiên 02:00</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-xs text-[#2D2522]">Thanh toán Ví MoMo</h4>
+                  <p className="text-[10px] text-[#786C65] mt-0.5">
+                    Cổng MoMo với bộ đếm ngược 2 phút và xử lý hết hạn tự động.
                   </p>
                 </div>
               </button>
@@ -535,7 +572,7 @@ export default function CheckoutPage() {
                 <div>
                   <h4 className="font-bold text-xs text-[#2D2522]">Tiền mặt khi nhận hàng (COD)</h4>
                   <p className="text-[10px] text-[#786C65] mt-0.5">
-                    Thanh toán trực tiếp cho shipper khi nhận trà sữa.
+                    Thanh toán tiền mặt trực tiếp cho shipper khi giao hàng thành công.
                   </p>
                 </div>
               </button>
@@ -732,6 +769,11 @@ export default function CheckoutPage() {
                 <>
                   <QrCode className="w-4 h-4" />
                   <span>Thanh Toán Qua SePay (VietQR TPBank) — {finalTotal.toLocaleString("vi-VN")}đ</span>
+                </>
+              ) : paymentMethod === "MOMO" ? (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Thanh Toán Ví MoMo (Phiên 02:00) — {finalTotal.toLocaleString("vi-VN")}đ</span>
                 </>
               ) : (
                 <>
