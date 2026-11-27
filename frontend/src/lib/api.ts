@@ -242,6 +242,9 @@ export const api = {
   // Delivery & Shipper
   getShipperDashboard: () => request<ShipperDashboard>("/delivery/dashboard"),
   getAssignedOrders: () => request<OrderResponse[]>("/delivery/assigned"),
+  getAvailableDeliveryOrders: () => request<OrderResponse[]>("/delivery/available"),
+  claimOrderForDelivery: (orderId: number, notes?: string) =>
+    request<boolean>(`/delivery/orders/${orderId}/claim`, { method: "POST", body: JSON.stringify({ notes: notes || "" }) }),
   assignShipper: (payload: { orderId: number; shipperId: number; notes?: string }) =>
     request<boolean>("/delivery/assign", { method: "POST", body: JSON.stringify(payload) }),
   updateDeliveryStatus: (orderId: number, payload: { status: string; failureReason?: string; notes?: string; isCodCollected?: boolean; proofImageUrl?: string }) =>

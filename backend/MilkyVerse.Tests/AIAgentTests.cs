@@ -808,7 +808,8 @@ public static class InProcessTestRunner
             ("T10_UnassignedShipper_ForbiddenFromUpdatingAnotherShippersOrder", () => cod.T10_UnassignedShipper_ForbiddenFromUpdatingAnotherShippersOrder()),
             ("T11_MomoOrder_ExpiresAfter2Minutes_IndependentlyFromCod", () => cod.T11_MomoOrder_ExpiresAfter2Minutes_IndependentlyFromCod()),
             ("T12_PreventsInvalidTransitions_AndDuplicatePaymentConfirmation", () => cod.T12_PreventsInvalidTransitions_AndDuplicatePaymentConfirmation()),
-            ("T13_MomoOrder_ValidIpnWithin2Minutes_ConfirmsPaymentSuccessfully", () => cod.T13_MomoOrder_ValidIpnWithin2Minutes_ConfirmsPaymentSuccessfully())
+            ("T13_MomoOrder_ValidIpnWithin2Minutes_ConfirmsPaymentSuccessfully", () => cod.T13_MomoOrder_ValidIpnWithin2Minutes_ConfirmsPaymentSuccessfully()),
+            ("T14_ShipperSeesAndClaimsReadyForPickupOrder_SyncsDeliveringToCustomer", () => cod.T14_ShipperSeesAndClaimsReadyForPickupOrder_SyncsDeliveringToCustomer())
         };
 
         foreach (var (name, run) in legacyTests.Concat(agentTests).Concat(codTests))

@@ -626,9 +626,11 @@ export interface ShipperDashboard {
   totalAssignedOrders: number;
   inTransitOrders: number;
   deliveredToday: number;
+  availableOrdersCount?: number;
   totalCodCollected: number;
   totalCodPendingReconcile: number;
   orders: OrderResponse[];
+  availableOrders?: OrderResponse[];
 }
 
 export interface Promotion {

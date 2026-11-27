@@ -36,8 +36,8 @@ export default function AdminOrdersPage() {
   const [dispatchNote, setDispatchNote] = useState("");
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
-  const loadOrders = async () => {
-    setLoading(true);
+  const loadOrders = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [data, shipperList] = await Promise.all([
         api.getOrders(),
@@ -56,12 +56,14 @@ export default function AdminOrdersPage() {
     } catch (err) {
       console.error("Lỗi khi tải đơn hàng:", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadOrders();
+    const interval = setInterval(() => loadOrders(true), 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleAssignSelectedShipper = async (orderId: number) => {
@@ -134,7 +136,7 @@ export default function AdminOrdersPage() {
         </div>
 
         <button
-          onClick={loadOrders}
+          onClick={() => loadOrders(false)}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white border border-[#EFE6DC] text-xs font-bold text-[#6F4E37] hover:bg-[#FAF7F2] self-start sm:self-auto shadow-sm"
         >
           <RefreshCw className="w-3.5 h-3.5" />

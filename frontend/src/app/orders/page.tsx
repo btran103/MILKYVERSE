@@ -95,19 +95,20 @@ export default function OrdersListPage() {
   const ITEMS_PER_PAGE = 5;
   const [currentPage, setCurrentPage] = useState(1);
 
-  const loadOrders = async () => {
+  const loadOrders = async (silent = false) => {
     if (!user) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setLoadError(null);
     try {
       const data = await api.getOrders();
       setOrders(data || []);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Đã xảy ra lỗi khi tải đơn hàng.";
-      setLoadError(msg);
-      console.warn("Lỗi khi tải đơn hàng:", msg);
+      if (!silent) {
+        const msg = err instanceof Error ? err.message : "Đã xảy ra lỗi khi tải đơn hàng.";
+        setLoadError(msg);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -115,6 +116,8 @@ export default function OrdersListPage() {
     if (!isLoading) {
       if (user) {
         loadOrders();
+        const interval = setInterval(() => loadOrders(true), 5000);
+        return () => clearInterval(interval);
       } else {
         setOrders([]);
         setLoading(false);

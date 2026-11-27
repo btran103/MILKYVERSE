@@ -480,4 +480,42 @@ public class CodOrderDeliveryTests
         Assert.Equal("Confirmed", updatedOrder.Data!.Status);
         Assert.Equal("Success", updatedOrder.Data.PaymentStatus);
     }
+
+    // Test 14: Đơn ReadyForPickup (từ khách hoặc AI) hiện ngay trong danh sách chờ nhận của Shipper và đồng bộ với khách khi Shipper nhận giao
+    [Fact]
+    public async Task T14_ShipperSeesAndClaimsReadyForPickupOrder_SyncsDeliveringToCustomer()
+    {
+        using var db = CreateDb();
+        var (customer, staff, shipper1, shipper2, product) = await SeedActorsAndProductAsync(db);
+        var orderService = new OrderService(db);
+        var deliveryService = new DeliveryService(db);
+
+        var created = await orderService.CreateOrderAsync(customer.Id, MakeOrderRequest(product.Id, product.Name, "COD"));
+        var orderId = created.Data!.Id;
+
+        await orderService.UpdateOrderStatusAsync(orderId, new UpdateOrderStatusRequest { Status = "Confirmed" }, staff.Id, "Staff", staff.FullName);
+        await orderService.UpdateOrderStatusAsync(orderId, new UpdateOrderStatusRequest { Status = "Preparing" }, staff.Id, "Staff", staff.FullName);
+        await orderService.UpdateOrderStatusAsync(orderId, new UpdateOrderStatusRequest { Status = "ReadyForPickup" }, staff.Id, "Staff", staff.FullName);
+
+        // Before assignment: appears in AvailableOrders on Shipper Dashboard
+        var dash1 = await deliveryService.GetShipperDashboardAsync(shipper1.Id);
+        Assert.True(dash1.Success);
+        Assert.Contains(dash1.Data!.AvailableOrders, o => o.Id == orderId);
+
+        // Shipper 1 claims it directly from ReadyForPickup pool
+        var claimRes = await deliveryService.ClaimOrderForDeliveryAsync(shipper1.Id, orderId);
+        Assert.True(claimRes.Success);
+
+        // No longer in AvailableOrders for Shipper 2, and Shipper 2 cannot update it
+        var dash2 = await deliveryService.GetShipperDashboardAsync(shipper2.Id);
+        Assert.DoesNotContain(dash2.Data!.AvailableOrders, o => o.Id == orderId);
+        var forbidRes = await deliveryService.UpdateDeliveryStatusAsync(shipper2.Id, orderId, new UpdateDeliveryStatusRequest { Status = "Delivered", IsCodCollected = true });
+        Assert.False(forbidRes.Success);
+        Assert.StartsWith("FORBIDDEN:", forbidRes.Message);
+
+        // Customer account syncs immediately to Delivering + sees Shipper 1
+        var customerView = await orderService.GetOrderByIdAsync(orderId, customer.Id);
+        Assert.Equal("Delivering", customerView.Data!.Status);
+        Assert.Equal(shipper1.FullName, customerView.Data.ShipperName);
+    }
 }
