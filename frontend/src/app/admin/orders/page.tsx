@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { OrderResponse } from "@/types";
+import { OrderResponse, User as UserType } from "@/types";
+import { getOrderStatusMeta, getPaymentStatusMeta, isCodPayment } from "@/lib/orderStatus";
 import {
   Truck,
   Package,
@@ -30,15 +31,23 @@ export default function AdminOrdersPage() {
 
   // Selected Order for Detail & Dispatch Modal
   const [selectedOrder, setSelectedOrder] = useState<OrderResponse | null>(null);
+  const [shippers, setShippers] = useState<UserType[]>([]);
+  const [selectedShipperId, setSelectedShipperId] = useState<number | null>(null);
   const [dispatchNote, setDispatchNote] = useState("");
-  const [shipperName, setShipperName] = useState("");
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const data = await api.getOrders();
+      const [data, shipperList] = await Promise.all([
+        api.getOrders(),
+        api.getShippers().catch(() => []),
+      ]);
       setOrders(data || []);
+      setShippers(shipperList || []);
+      if (shipperList && shipperList.length > 0 && selectedShipperId === null) {
+        setSelectedShipperId(shipperList[0].id);
+      }
       // If modal is open, refresh selected order too
       if (selectedOrder) {
         const updated = data.find((o) => o.id === selectedOrder.id);
@@ -55,6 +64,29 @@ export default function AdminOrdersPage() {
     loadOrders();
   }, []);
 
+  const handleAssignSelectedShipper = async (orderId: number) => {
+    if (!selectedShipperId) {
+      alert("Vui lòng chọn shipper phụ trách giao đơn.");
+      return;
+    }
+    setUpdatingId(orderId);
+    setActionSuccessMsg(null);
+    try {
+      await api.assignShipper({
+        orderId,
+        shipperId: selectedShipperId,
+        notes: dispatchNote.trim() || "Admin phân công shipper giao hàng",
+      });
+      setActionSuccessMsg("Đã phân công shipper & chuyển đơn sang Sẵn sàng giao hàng!");
+      await loadOrders();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Lỗi phân công shipper.");
+    } finally {
+      setUpdatingId(null);
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }
+  };
+
   const handleUpdateStatus = async (
     orderId: number,
     newStatus: string,
@@ -65,16 +97,13 @@ export default function AdminOrdersPage() {
     setActionSuccessMsg(null);
     try {
       const noteToSend =
-        customNote ||
-        (newStatus === "Delivering" && shipperName
-          ? `Bàn giao shipper: ${shipperName}. ${dispatchNote}`
-          : `Quản trị viên cập nhật trạng thái thành: ${newStatus}`);
+        customNote || `Quản trị viên cập nhật trạng thái thành: ${newStatus}`;
 
       await api.updateOrderStatus(orderId, newStatus, paymentStatus, noteToSend);
       setActionSuccessMsg(`Đã cập nhật đơn hàng sang trạng thái: ${newStatus}`);
       await loadOrders();
-    } catch {
-      alert("Lỗi khi cập nhật trạng thái đơn.");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Lỗi khi cập nhật trạng thái đơn.");
     } finally {
       setUpdatingId(null);
       setTimeout(() => setActionSuccessMsg(null), 3000);
@@ -83,6 +112,8 @@ export default function AdminOrdersPage() {
 
   const filtered = orders.filter((o) => {
     if (statusFilter === "ALL") return true;
+    if (statusFilter === "Pending") return o.status === "Pending" || o.status === "PendingConfirmation";
+    if (statusFilter === "Completed") return o.status === "Completed" || o.status === "Delivered";
     return o.status === statusFilter;
   });
 
@@ -115,16 +146,22 @@ export default function AdminOrdersPage() {
       <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
         {[
           { key: "ALL", label: "Tất Cả Đơn" },
-          { key: "Pending", label: "Chờ Duyệt (Mới)" },
+          { key: "Pending", label: "Chờ Xác Nhận" },
           { key: "Confirmed", label: "Đã Xác Nhận" },
-          { key: "Preparing", label: "Đang Pha Chế" },
-          { key: "Delivering", label: "Đang Vận Chuyển" },
-          { key: "Completed", label: "Đã Giao Xong" },
+          { key: "Preparing", label: "Đang Chuẩn Bị" },
+          { key: "ReadyForPickup", label: "Sẵn Sàng Giao" },
+          { key: "Delivering", label: "Đang Giao Hàng" },
+          { key: "Completed", label: "Giao Thành Công" },
+          { key: "DeliveryFailed", label: "Giao Thất Bại" },
           { key: "Cancelled", label: "Đã Hủy" },
         ].map((st) => {
           const count =
             st.key === "ALL"
               ? orders.length
+              : st.key === "Pending"
+              ? orders.filter((o) => o.status === "Pending" || o.status === "PendingConfirmation").length
+              : st.key === "Completed"
+              ? orders.filter((o) => o.status === "Completed" || o.status === "Delivered").length
               : orders.filter((o) => o.status === st.key).length;
 
           return (
@@ -191,7 +228,11 @@ export default function AdminOrdersPage() {
                     currentPage * ITEMS_PER_PAGE
                   );
 
-                  return paged.map((o) => (
+                  return paged.map((o) => {
+                    const statusMeta = getOrderStatusMeta(o.status);
+                    const paymentMeta = getPaymentStatusMeta(o.paymentStatus, o.paymentMethod);
+
+                    return (
                     <tr key={o.id} className="hover:bg-[#FAF7F2]/60 transition-colors">
                       <td className="p-4 font-black text-[#2D2522]">
                         <button
@@ -223,40 +264,24 @@ export default function AdminOrdersPage() {
                           {o.totalAmount.toLocaleString("vi-VN")}đ
                         </p>
                         <span
-                          className={`inline-block text-[10px] font-bold px-1.5 py-0.2 rounded mt-0.5 ${
-                            o.paymentStatus === "Paid"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
+                          className={`inline-block text-[10px] font-bold px-1.5 py-0.2 rounded mt-0.5 ${paymentMeta.badgeClass}`}
                         >
-                          {o.paymentMethod} • {o.paymentStatus === "Paid" ? "Đã TT" : "Chưa TT"}
+                          {o.paymentMethod} • {paymentMeta.isPaid ? "Đã TT" : isCodPayment(o.paymentMethod) ? "Unpaid (COD)" : o.paymentStatus}
                         </span>
                       </td>
 
                       <td className="p-4">
                         <div className="space-y-1">
                           <span
-                            className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-flex items-center gap-1 ${
-                              o.status === "Pending"
-                                ? "bg-amber-100 text-amber-900 border border-amber-300"
-                                : o.status === "Confirmed"
-                                ? "bg-blue-100 text-blue-900 border border-blue-300"
-                                : o.status === "Preparing"
-                                ? "bg-purple-100 text-purple-900 border border-purple-300"
-                                : o.status === "Delivering"
-                                ? "bg-cyan-100 text-cyan-900 border border-cyan-300"
-                                : o.status === "Completed"
-                                ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
-                                : "bg-red-100 text-red-900 border border-red-300"
-                            }`}
+                            className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-flex items-center gap-1 ${statusMeta.badgeClass}`}
                           >
-                            {o.status === "Pending" && "⏳ Chờ duyệt (Quầy/Admin)"}
-                            {o.status === "Confirmed" && "📋 Đã duyệt -> Chờ Bếp nấu"}
-                            {o.status === "Preparing" && "🧋 Bếp đang pha chế"}
-                            {o.status === "Delivering" && "🛵 Shipper đang giao"}
-                            {o.status === "Completed" && "✅ Giao xong (Khách nhận)"}
-                            {o.status === "Cancelled" && "❌ Đã hủy đơn"}
+                            {statusMeta.label}
                           </span>
+                          {o.shipperName && (
+                            <span className="block text-[10px] text-[#786C65]">
+                              Shipper: <strong>{o.shipperName}</strong>
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -270,14 +295,14 @@ export default function AdminOrdersPage() {
                           </button>
 
                           {/* Quick Action buttons */}
-                          {o.status === "Pending" && (
+                          {(o.status === "Pending" || o.status === "PendingConfirmation") && (
                             <button
                               onClick={() => handleUpdateStatus(o.id, "Confirmed")}
                               disabled={updatingId === o.id}
                               className="px-2.5 py-1.5 rounded-xl bg-[#4E7D55] text-white font-bold hover:bg-[#3D6343] transition-colors"
-                              title="Quầy/Admin duyệt đơn"
+                              title="Quầy/Admin xác nhận đơn"
                             >
-                              Duyệt đơn
+                              Xác nhận đơn
                             </button>
                           )}
 
@@ -288,35 +313,36 @@ export default function AdminOrdersPage() {
                               className="px-2.5 py-1.5 rounded-xl bg-[#6F4E37] text-white font-bold hover:bg-[#4A3324] transition-colors"
                               title="Chuyển Bếp chuẩn bị"
                             >
-                              Bếp nấu
+                              Đang chuẩn bị
                             </button>
                           )}
 
                           {o.status === "Preparing" && (
                             <button
-                              onClick={() => setSelectedOrder(o)}
-                              className="px-2.5 py-1.5 rounded-xl bg-cyan-700 text-white font-bold hover:bg-cyan-800 transition-colors flex items-center gap-1"
-                              title="Bếp hoàn tất & Giao shipper"
+                              onClick={() => handleUpdateStatus(o.id, "ReadyForPickup")}
+                              disabled={updatingId === o.id}
+                              className="px-2.5 py-1.5 rounded-xl bg-purple-700 text-white font-bold hover:bg-purple-800 transition-colors"
+                              title="Báo sẵn sàng giao hàng"
                             >
-                              <Truck className="w-3.5 h-3.5" />
-                              <span>Giao shipper</span>
+                              Sẵn sàng giao
                             </button>
                           )}
 
-                          {o.status === "Delivering" && (
+                          {(o.status === "ReadyForPickup" || o.status === "DeliveryFailed") && (
                             <button
-                              onClick={() => handleUpdateStatus(o.id, "Completed", "Paid")}
-                              disabled={updatingId === o.id}
-                              className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors"
-                              title="Hoàn tất đơn hàng"
+                              onClick={() => setSelectedOrder(o)}
+                              className="px-2.5 py-1.5 rounded-xl bg-cyan-700 text-white font-bold hover:bg-cyan-800 transition-colors flex items-center gap-1"
+                              title="Phân công Shipper giao hàng"
                             >
-                              Khách nhận (Đã TT)
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>{o.status === "DeliveryFailed" ? "Giao lại" : "Giao shipper"}</span>
                             </button>
                           )}
                         </div>
                       </td>
                     </tr>
-                  ));
+                    );
+                  });
                 })()
               )}
             </tbody>
@@ -530,24 +556,29 @@ export default function AdminOrdersPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-bold text-[#2D2522] block mb-1">
-                      Tên Tài xế / Đơn vị giao hàng (Shipper)
+                      Chọn Shipper Phụ Trách Giao Hàng
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Ví dụ: Anh Nam (Ahamove - 0987xxx)"
-                      value={shipperName}
-                      onChange={(e) => setShipperName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] focus:outline-none focus:border-[#6F4E37]"
-                    />
+                    <select
+                      value={selectedShipperId ?? ""}
+                      onChange={(e) => setSelectedShipperId(Number(e.target.value) || null)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] focus:outline-none focus:border-[#6F4E37] font-semibold"
+                    >
+                      <option value="">-- Chọn tài xế giao hàng --</option>
+                      {shippers.map((sp) => (
+                        <option key={sp.id} value={sp.id}>
+                          {sp.fullName} ({sp.phoneNumber})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="font-bold text-[#2D2522] block mb-1">
-                      Ghi chú vận chuyển / Mã vận đơn
+                      Ghi chú điều phối vận chuyển
                     </label>
                     <input
                       type="text"
-                      placeholder="Ví dụ: Giao trước 15:00, trà sữa để túi giữ nhiệt"
+                      placeholder="Ví dụ: Giao giữ nhiệt, thu COD đúng số tiền..."
                       value={dispatchNote}
                       onChange={(e) => setDispatchNote(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] focus:outline-none focus:border-[#6F4E37]"
@@ -555,58 +586,69 @@ export default function AdminOrdersPage() {
                   </div>
                 </div>
 
-                {/* Progress Buttons with Actor Tags */}
+                {/* Progress Buttons */}
                 <div className="pt-2 flex flex-wrap gap-2">
                   <button
                     onClick={() => handleUpdateStatus(selectedOrder.id, "Confirmed")}
-                    disabled={updatingId === selectedOrder.id || selectedOrder.status === "Confirmed"}
+                    disabled={updatingId === selectedOrder.id || (selectedOrder.status !== "Pending" && selectedOrder.status !== "PendingConfirmation")}
                     className="px-3.5 py-2.5 rounded-xl bg-[#4E7D55] text-white font-bold hover:bg-[#3D6343] transition-colors disabled:opacity-40"
-                    title="NV Quầy hoặc Admin duyệt đơn"
+                    title="Xác nhận đơn hàng (không làm thay đổi trạng thái Unpaid của COD)"
                   >
-                    1. [Quầy/Admin] Duyệt đơn
+                    1. Xác nhận đơn
                   </button>
 
                   <button
                     onClick={() => handleUpdateStatus(selectedOrder.id, "Preparing")}
-                    disabled={updatingId === selectedOrder.id || selectedOrder.status === "Preparing"}
+                    disabled={updatingId === selectedOrder.id || selectedOrder.status !== "Confirmed"}
                     className="px-3.5 py-2.5 rounded-xl bg-[#6F4E37] text-white font-bold hover:bg-[#4A3324] transition-colors disabled:opacity-40"
-                    title="Bếp nhận thông báo & bắt đầu nấu"
                   >
-                    2. [Bếp] Bắt đầu pha chế
+                    2. Đang chuẩn bị
                   </button>
 
                   <button
-                    onClick={() => handleUpdateStatus(selectedOrder.id, "Delivering")}
-                    disabled={updatingId === selectedOrder.id || selectedOrder.status === "Delivering"}
+                    onClick={() => handleUpdateStatus(selectedOrder.id, "ReadyForPickup")}
+                    disabled={updatingId === selectedOrder.id || selectedOrder.status !== "Preparing"}
+                    className="px-3.5 py-2.5 rounded-xl bg-purple-700 text-white font-bold hover:bg-purple-800 transition-colors disabled:opacity-40"
+                  >
+                    3. Sẵn sàng giao
+                  </button>
+
+                  <button
+                    onClick={() => handleAssignSelectedShipper(selectedOrder.id)}
+                    disabled={
+                      updatingId === selectedOrder.id ||
+                      !selectedShipperId ||
+                      !["Confirmed", "Preparing", "ReadyForPickup", "DeliveryFailed"].includes(selectedOrder.status)
+                    }
                     className="px-3.5 py-2.5 rounded-xl bg-cyan-700 text-white font-bold hover:bg-cyan-800 transition-colors disabled:opacity-40 flex items-center gap-1.5"
-                    title="Bếp nấu xong, shipper tự nhận hoặc quầy bàn giao"
+                    title="Phân công shipper nhận giao (Shipper sẽ xác nhận Đang giao & Giao xong + Thu COD trên trang Shipper)"
                   >
                     <Truck className="w-3.5 h-3.5" />
-                    <span>3. [Shipper] Nhận đơn & Vận chuyển</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleUpdateStatus(selectedOrder.id, "Completed", "Paid")}
-                    disabled={updatingId === selectedOrder.id || selectedOrder.status === "Completed"}
-                    className="px-3.5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors disabled:opacity-40"
-                    title="Khách hàng tự xác nhận hoặc Shipper báo đã giao"
-                  >
-                    4. [Khách/Shipper] Đã giao xong
+                    <span>4. Phân công Shipper</span>
                   </button>
 
                   <button
                     onClick={() => {
                       const reason = prompt("Nhập lý do hủy đơn hàng:");
                       if (reason) {
-                        handleUpdateStatus(selectedOrder.id, "Cancelled", "Failed", `Lý do hủy: ${reason}`);
+                        handleUpdateStatus(selectedOrder.id, "Cancelled", undefined, `Lý do hủy: ${reason}`);
                       }
                     }}
-                    disabled={updatingId === selectedOrder.id || selectedOrder.status === "Cancelled" || selectedOrder.status === "Completed"}
+                    disabled={
+                      updatingId === selectedOrder.id ||
+                      ["Cancelled", "Completed", "Delivered", "Rejected"].includes(selectedOrder.status)
+                    }
                     className="px-3.5 py-2.5 rounded-xl bg-red-100 text-red-700 font-bold hover:bg-red-200 transition-colors disabled:opacity-40 ml-auto"
                   >
                     Hủy đơn hàng
                   </button>
                 </div>
+
+                {isCodPayment(selectedOrder.paymentMethod) && (
+                  <p className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                    Lưu ý quy trình COD: Đơn COD giữ trạng thái thanh toán <strong>Unpaid</strong> tại quầy/bếp và chỉ chuyển sang <strong>Paid</strong> khi Shipper được phân công xác nhận đã giao hàng & thu đủ tiền mặt.
+                  </p>
+                )}
               </div>
             </div>
           </div>

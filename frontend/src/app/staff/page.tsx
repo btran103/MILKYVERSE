@@ -182,11 +182,17 @@ export default function StaffOrderBoardPage() {
 
   // Kitchen only cares about uncompleted food/drink prep orders
   const kitchenOrders = orders.filter((o) => {
-    return o.status === "Pending" || o.status === "Confirmed" || o.status === "Preparing" || o.status === "ReadyForPickup";
+    return (
+      o.status === "Pending" ||
+      o.status === "PendingConfirmation" ||
+      o.status === "Confirmed" ||
+      o.status === "Preparing" ||
+      o.status === "ReadyForPickup"
+    );
   });
 
   const filteredOrders = kitchenOrders.filter((o) => {
-    if (activeTab === "PENDING" && o.status !== "Pending") return false;
+    if (activeTab === "PENDING" && o.status !== "Pending" && o.status !== "PendingConfirmation") return false;
     if (activeTab === "CONFIRMED" && o.status !== "Confirmed") return false;
     if (activeTab === "PREPARING" && o.status !== "Preparing") return false;
     if (activeTab === "READY" && o.status !== "ReadyForPickup") return false;
@@ -207,6 +213,7 @@ export default function StaffOrderBoardPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "PendingConfirmation":
       case "Pending":
         return <span className="bg-amber-100 text-amber-800 text-[11px] font-bold px-2.5 py-1 rounded-full">Chờ xác nhận</span>;
       case "Confirmed":
@@ -269,7 +276,7 @@ export default function StaffOrderBoardPage() {
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
           {[
             { key: "ALL", label: `Tất cả (${kitchenOrders.length})` },
-            { key: "PENDING", label: `Chờ nhận (${kitchenOrders.filter((o) => o.status === "Pending").length})` },
+            { key: "PENDING", label: `Chờ nhận (${kitchenOrders.filter((o) => o.status === "Pending" || o.status === "PendingConfirmation").length})` },
             { key: "CONFIRMED", label: `Đã nhận (${kitchenOrders.filter((o) => o.status === "Confirmed").length})` },
             { key: "PREPARING", label: `Đang nấu/pha (${kitchenOrders.filter((o) => o.status === "Preparing").length})` },
             { key: "READY", label: `Đã xong (${kitchenOrders.filter((o) => o.status === "ReadyForPickup").length})` },
@@ -429,14 +436,14 @@ export default function StaffOrderBoardPage() {
                       <span>Phiếu Bếp</span>
                     </button>
 
-                    {o.status === "Pending" && (
+                    {(o.status === "Pending" || o.status === "PendingConfirmation") && (
                       <button
-                        onClick={() => handleUpdateStatus(o.id, "Confirmed", "Bếp đã tiếp nhận đơn")}
+                        onClick={() => handleUpdateStatus(o.id, "Confirmed", "Cửa hàng / Bếp đã xác nhận đơn hàng")}
                         disabled={actionLoading}
                         className="py-2.5 px-3 rounded-xl bg-[#6F4E37] text-white text-xs font-bold hover:bg-[#4A3324] shadow-sm flex items-center justify-center gap-1"
                       >
                         <CheckCircle className="w-3.5 h-3.5" />
-                        <span>Nhận đơn</span>
+                        <span>Xác nhận đơn</span>
                       </button>
                     )}
 

@@ -137,8 +137,15 @@ public class AuthService : IAuthService
 
         if (string.IsNullOrWhiteSpace(smtpPass))
         {
-            return ApiResponse<SendOtpResultDto>.Fail(
-                "Chưa cấu hình Mật khẩu ứng dụng (App Password 16 ký tự) cho Gmail 'milkyverse103@gmail.com'. Vui lòng điền App Password vào mục Email:Password trong appsettings.json (hoặc biến môi trường MILKYVERSE_SMTP_APP_PASSWORD).");
+            return ApiResponse<SendOtpResultDto>.Ok(new SendOtpResultDto
+            {
+                Email = normalizedEmail,
+                Code = otpCode,
+                Message = $"[Chế độ Local/Test] Mã xác thực OTP của bạn là: {otpCode}",
+                SentViaSmtp = false,
+                ExpiresInSeconds = expiryMinutes * 60,
+                ResendCooldownSeconds = resendCooldownSec
+            });
         }
 
         try

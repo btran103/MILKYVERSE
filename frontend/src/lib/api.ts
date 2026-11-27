@@ -1,11 +1,17 @@
 import {
+  AIChatResponsePayload,
+  AIConversationDetail,
+  AIConversationSummary,
+  AIStatusResponse,
   AuthResponse,
+  CartItem,
   Category,
   CreateOrderRequest,
   DashboardSummary,
   DIYCatalog,
   DIYQuoteRequest,
   DIYQuoteResponse,
+  FavoriteRecipe,
   Ingredient,
   OrderResponse,
   PaymentTransaction,
@@ -161,44 +167,46 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  // AI Barista
-  getAIStatus: () =>
-    request<{
-      isConfigured: boolean;
-      provider: string;
-      activeModel: string;
-      maskedApiKey: string;
-      endpointUrl: string;
-      activeMenuCount: number;
-      activeToppingCount: number;
-    }>("/ai/status"),
+  // AI Barista & Full AI Agent
+  getAIStatus: () => request<AIStatusResponse>("/ai/status"),
 
   configureAIApiKey: (payload: { apiKey: string; provider?: string; model?: string }) =>
-    request<{
-      isConfigured: boolean;
-      provider: string;
-      activeModel: string;
-      maskedApiKey: string;
-      endpointUrl: string;
-      activeMenuCount: number;
-      activeToppingCount: number;
-    }>("/ai/config", {
+    request<AIStatusResponse>("/ai/config", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  sendAIChat: (message: string, sessionId?: number, apiKey?: string, provider?: string) =>
-    request<{
-      sessionId: number;
-      reply: string;
-      suggestedDrinks: SuggestedDrink[];
-      isAiModelLive: boolean;
-      modelName?: string;
-      apiError?: string;
-    }>("/ai/chat", {
+  sendAIChat: (message: string, sessionId?: number, clientCart?: CartItem[]) =>
+    request<AIChatResponsePayload>("/ai/chat", {
       method: "POST",
-      body: JSON.stringify({ message, sessionId, apiKey, provider }),
+      body: JSON.stringify({ message, sessionId, clientCart }),
     }),
+
+  getAIConversations: () => request<AIConversationSummary[]>("/ai/conversations"),
+
+  createAIConversation: (title?: string) =>
+    request<AIConversationSummary>("/ai/conversations", {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    }),
+
+  getAIConversationDetail: (sessionId: number) =>
+    request<AIConversationDetail>(`/ai/conversations/${sessionId}`),
+
+  deleteAIConversation: (sessionId: number) =>
+    request<boolean>(`/ai/conversations/${sessionId}`, { method: "DELETE" }),
+
+  getFavoriteRecipes: (sessionId?: number) =>
+    request<FavoriteRecipe[]>(`/ai/favorite-recipes${sessionId ? `?sessionId=${sessionId}` : ""}`),
+
+  saveFavoriteRecipe: (payload: Partial<FavoriteRecipe>, sessionId?: number) =>
+    request<FavoriteRecipe>(`/ai/favorite-recipes${sessionId ? `?sessionId=${sessionId}` : ""}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteFavoriteRecipe: (recipeId: number) =>
+    request<boolean>(`/ai/favorite-recipes/${recipeId}`, { method: "DELETE" }),
 
   // Admin & Manager
   getDashboard: () => request<DashboardSummary>("/admin/dashboard"),

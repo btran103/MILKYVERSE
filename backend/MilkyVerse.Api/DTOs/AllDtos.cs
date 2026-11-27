@@ -363,6 +363,9 @@ public class OrderStatusHistoryDto
     public int Id { get; set; }
     public string Status { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
+    public int? ChangedByUserId { get; set; }
+    public string? ChangedByName { get; set; }
+    public string? ChangedByRole { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -385,8 +388,11 @@ public class OrderResponse
     public string? CancelReason { get; set; }
     public bool CanCancel { get; set; } = false;
     public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public DateTime? PaymentExpiresAt { get; set; }
     public DateTime? PaidAt { get; set; }
+    public int? PaymentConfirmedByUserId { get; set; }
+    public string PaymentConfirmedByName { get; set; } = string.Empty;
     public int RemainingPaymentSeconds { get; set; }
     public DateTime ServerTimeUtc { get; set; } = DateTime.UtcNow;
     public List<OrderDetailResponse> Items { get; set; } = new();
@@ -398,8 +404,13 @@ public class OrderResponse
     public string ShipperName { get; set; } = string.Empty;
     public string ShipperPhone { get; set; } = string.Empty;
     public string DeliveryStatus { get; set; } = string.Empty;
+    public string DeliveryFailureReason { get; set; } = string.Empty;
+    public DateTime? AssignedAt { get; set; }
+    public DateTime? PickedUpAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
     public decimal CodAmount { get; set; } = 0;
     public bool IsCodCollected { get; set; } = false;
+    public DateTime? CodCollectedAt { get; set; }
     public bool CodReconciled { get; set; } = false;
 }
 
@@ -627,7 +638,7 @@ public class ValidatePromoResponse
 }
 
 // ==========================================
-// 8. AI BARISTA DTOs
+// 8. AI BARISTA & FULL AI AGENT DTOs
 // ==========================================
 public class SuggestedDrinkDto
 {
@@ -641,14 +652,45 @@ public class SuggestedDrinkDto
     public string Reason { get; set; } = string.Empty;
     public string? Slug { get; set; }
     public string? ImageUrl { get; set; }
+    public string ProductType { get; set; } = "DRINK";
+    public string CategoryName { get; set; } = string.Empty;
+    public bool IsInStock { get; set; } = true;
+}
+
+public class AIClientCartItemDto
+{
+    public string? Id { get; set; }
+    public int? ProductId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? ImageUrl { get; set; }
+    public string ItemType { get; set; } = "DRINK";
+    public string Size { get; set; } = "M";
+    public string? SugarLevel { get; set; } = "50%";
+    public string? IceLevel { get; set; } = "70%";
+    public string? SpicyLevel { get; set; }
+    public string? DippingSauce { get; set; }
+    public string? PortionSize { get; set; }
+    public decimal UnitPrice { get; set; }
+    public int Quantity { get; set; } = 1;
+    public decimal TotalPrice { get; set; }
+    public bool IsCustomDIY { get; set; }
+    public string? CustomNotes { get; set; }
+    public List<AIClientCartToppingDto> Toppings { get; set; } = new();
+}
+
+public class AIClientCartToppingDto
+{
+    public int ToppingId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int Quantity { get; set; } = 1;
 }
 
 public class AIChatRequest
 {
     public int? SessionId { get; set; }
     public string Message { get; set; } = string.Empty;
-    public string? ApiKey { get; set; }
-    public string? Provider { get; set; }
+    public List<AIClientCartItemDto>? ClientCart { get; set; }
 }
 
 public class AIConfigRequest
@@ -667,6 +709,128 @@ public class AIStatusResponse
     public string EndpointUrl { get; set; } = "/api/ai/chat";
     public int ActiveMenuCount { get; set; }
     public int ActiveToppingCount { get; set; }
+    public int AvailableToolsCount { get; set; } = 31;
+}
+
+public class AIToolExecutionLogDto
+{
+    public string ToolName { get; set; } = string.Empty;
+    public string ArgumentsJson { get; set; } = "{}";
+    public string ResultSummary { get; set; } = string.Empty;
+    public bool Success { get; set; } = true;
+}
+
+public class AIRecipeCardDto
+{
+    public int? SavedRecipeId { get; set; }
+    public string RecipeName { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string TeaBaseId { get; set; } = "black_tea";
+    public string TeaBaseName { get; set; } = string.Empty;
+    public string MilkId { get; set; } = "fresh_milk";
+    public string MilkName { get; set; } = string.Empty;
+    public string Size { get; set; } = "M";
+    public string SugarLevel { get; set; } = "50%";
+    public string IceLevel { get; set; } = "70%";
+    public List<ToppingDto> Toppings { get; set; } = new();
+    public decimal UnitPrice { get; set; }
+    public List<string> PriceBreakdown { get; set; } = new();
+    public List<string> BrewingSteps { get; set; } = new();
+    public bool IsReferenceFormula { get; set; } = false; // True = công thức tham khảo sáng tạo; False = cấu hình DIY có thể đặt mua
+    public bool IsPurchasable { get; set; } = true;
+    public string DiyLink { get; set; } = "/diy";
+}
+
+public class AIDrinkCustomizationCardDto
+{
+    public int? ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public string? Slug { get; set; }
+    public string? ImageUrl { get; set; }
+    public bool IsCustomDIY { get; set; }
+    public string? TeaBaseId { get; set; }
+    public string? MilkId { get; set; }
+    public string Size { get; set; } = "M";
+    public string SugarLevel { get; set; } = "50%";
+    public string IceLevel { get; set; } = "70%";
+    public List<ToppingDto> SelectedToppings { get; set; } = new();
+    public int Quantity { get; set; } = 1;
+    public decimal UnitPrice { get; set; }
+    public decimal TotalPrice { get; set; }
+    public List<string> Breakdown { get; set; } = new();
+    public bool IsValid { get; set; } = true;
+}
+
+public class AICartActionCardDto
+{
+    public string ActionType { get; set; } = "VIEW"; // ADD, UPDATE, REMOVE, CLEAR, VIEW
+    public string Summary { get; set; } = string.Empty;
+    public List<AIClientCartItemDto> AffectedItems { get; set; } = new();
+    public List<AIClientCartItemDto> CurrentCart { get; set; } = new();
+    public int TotalItemsCount { get; set; }
+    public decimal CartSubtotal { get; set; }
+}
+
+public class AIOrderStatusCardDto
+{
+    public int OrderId { get; set; }
+    public string OrderCode { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public string PaymentStatus { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = string.Empty;
+    public decimal TotalAmount { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string CustomerPhone { get; set; } = string.Empty;
+    public string ShippingAddress { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public List<string> ItemSummaries { get; set; } = new();
+    public string OrderUrl { get; set; } = string.Empty;
+    public string? PaymentQrUrl { get; set; }
+    public string? PaymentPageUrl { get; set; }
+}
+
+public class AIPaymentCardDto
+{
+    public int OrderId { get; set; }
+    public string OrderCode { get; set; } = string.Empty;
+    public string PaymentMethod { get; set; } = "SEPAY";
+    public string PaymentStatus { get; set; } = "Pending";
+    public decimal Amount { get; set; }
+    public string? QrCodeUrl { get; set; }
+    public string? PayUrl { get; set; }
+    public string? BankName { get; set; }
+    public string? AccountNumber { get; set; }
+    public string? AccountName { get; set; }
+    public string? TransferContent { get; set; }
+    public string Instructions { get; set; } = string.Empty;
+}
+
+public class AIInventoryReportCardDto
+{
+    public int TotalIngredients { get; set; }
+    public int LowStockCount { get; set; }
+    public int OutOfStockCount { get; set; }
+    public List<IngredientDto> HighlightedIngredients { get; set; } = new();
+    public string SummaryNote { get; set; } = string.Empty;
+}
+
+public class AIAdminAnalyticsCardDto
+{
+    public decimal TotalRevenue { get; set; }
+    public int TotalOrders { get; set; }
+    public int CompletedOrders { get; set; }
+    public int PendingOrders { get; set; }
+    public int CancelledOrders { get; set; }
+    public int TotalCustomers { get; set; }
+    public int LowStockCount { get; set; }
+    public List<ProductDto> BestSellingProducts { get; set; } = new();
+    public string PeriodLabel { get; set; } = "Toàn thời gian";
+}
+
+public class AIClientActionDto
+{
+    public string Type { get; set; } = string.Empty; // "ADD_TO_CART" | "OPEN_DIY" | "APPLY_COUPON"
+    public object Payload { get; set; } = new();
 }
 
 public class AIChatResponse
@@ -674,9 +838,69 @@ public class AIChatResponse
     public int SessionId { get; set; }
     public string Reply { get; set; } = string.Empty;
     public List<SuggestedDrinkDto> SuggestedDrinks { get; set; } = new();
+    public List<AIClientActionDto> Actions { get; set; } = new();
+    public List<AIRecipeCardDto> Recipes { get; set; } = new();
+    public List<AIDrinkCustomizationCardDto> Customizations { get; set; } = new();
+    public AICartActionCardDto? CartAction { get; set; }
+    public List<AIOrderStatusCardDto> Orders { get; set; } = new();
+    public AIPaymentCardDto? Payment { get; set; }
+    public AIInventoryReportCardDto? InventoryReport { get; set; }
+    public AIAdminAnalyticsCardDto? AdminAnalytics { get; set; }
+    public List<AIToolExecutionLogDto> ExecutedTools { get; set; } = new();
+    public List<string> SuggestedPrompts { get; set; } = new();
     public bool IsAiModelLive { get; set; }
-    public string ModelName { get; set; } = "MilkyVerse Dataset API v2";
+    public string ModelName { get; set; } = "MilkyVerse AI Agent v3";
     public string? ApiError { get; set; }
+}
+
+public class AIConversationSummaryDto
+{
+    public int Id { get; set; }
+    public int? UserId { get; set; }
+    public string SessionTitle { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+    public int MessageCount { get; set; }
+    public string LastMessagePreview { get; set; } = string.Empty;
+}
+
+public class AIConversationMessageDto
+{
+    public int Id { get; set; }
+    public string SenderRole { get; set; } = "User";
+    public string Content { get; set; } = string.Empty;
+    public List<SuggestedDrinkDto> SuggestedDrinks { get; set; } = new();
+    public AIChatResponse? AgentPayload { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class AIConversationDetailDto
+{
+    public int Id { get; set; }
+    public int? UserId { get; set; }
+    public string SessionTitle { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+    public List<AIConversationMessageDto> Messages { get; set; } = new();
+}
+
+public class FavoriteRecipeDto
+{
+    public int Id { get; set; }
+    public int? UserId { get; set; }
+    public string RecipeName { get; set; } = string.Empty;
+    public string TeaBaseId { get; set; } = string.Empty;
+    public string TeaBaseName { get; set; } = string.Empty;
+    public string MilkId { get; set; } = string.Empty;
+    public string MilkName { get; set; } = string.Empty;
+    public string Size { get; set; } = "M";
+    public string SugarLevel { get; set; } = "50%";
+    public string IceLevel { get; set; } = "70%";
+    public List<int> ToppingIds { get; set; } = new();
+    public List<string> ToppingNames { get; set; } = new();
+    public decimal UnitPrice { get; set; }
+    public string Notes { get; set; } = string.Empty;
+    public bool IsReferenceFormula { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 // ==========================================

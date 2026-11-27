@@ -31,6 +31,8 @@ public class MilkyVerseDbContext : DbContext
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<ChatSession> ChatSessions => Set<ChatSession>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<FavoriteRecipe> FavoriteRecipes => Set<FavoriteRecipe>();
+    public DbSet<AICartItem> AICartItems => Set<AICartItem>();
     public DbSet<EmailVerification> EmailVerifications => Set<EmailVerification>();
     public DbSet<ProductReview> ProductReviews => Set<ProductReview>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();

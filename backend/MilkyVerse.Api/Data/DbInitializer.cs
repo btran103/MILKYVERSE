@@ -53,12 +53,123 @@ public static class DbInitializer
     {
         await context.Database.EnsureCreatedAsync();
         await EnsureColumnExistsAsync(context, "Users", "AvatarUrl", "TEXT");
+        await EnsureColumnExistsAsync(context, "Products", "ImagePlaceholder", "TEXT");
         await EnsureColumnExistsAsync(context, "Orders", "CancelReason", "TEXT");
         await EnsureColumnExistsAsync(context, "Orders", "PaymentExpiresAt", "TEXT");
         await EnsureColumnExistsAsync(context, "Orders", "PaidAt", "TEXT");
         await EnsureColumnExistsAsync(context, "Orders", "PayOsOrderCode", "INTEGER");
+        await EnsureColumnExistsAsync(context, "Orders", "PaymentConfirmedByUserId", "INTEGER");
+        await EnsureColumnExistsAsync(context, "Orders", "PaymentConfirmedByName", "TEXT");
+        await EnsureColumnExistsAsync(context, "DeliveryAssignments", "CodCollectedAt", "TEXT");
+        await EnsureColumnExistsAsync(context, "DeliveryAssignments", "CollectedByUserId", "INTEGER");
+        await EnsureColumnExistsAsync(context, "OrderStatusHistories", "ChangedByUserId", "INTEGER");
+        await EnsureColumnExistsAsync(context, "OrderStatusHistories", "ChangedByName", "TEXT");
+        await EnsureColumnExistsAsync(context, "OrderStatusHistories", "ChangedByRole", "TEXT");
         await EnsureColumnExistsAsync(context, "PaymentTransactions", "PayOsOrderCode", "INTEGER");
         await EnsureColumnExistsAsync(context, "PaymentTransactions", "PayOsPaymentLinkId", "TEXT");
+        await EnsureColumnExistsAsync(context, "ChatSessions", "UpdatedAt", "TEXT");
+        await EnsureColumnExistsAsync(context, "ChatMessages", "ToolCallsJson", "TEXT");
+        await EnsureColumnExistsAsync(context, "ChatMessages", "AgentPayloadJson", "TEXT");
+
+        try
+        {
+            if (context.Database.IsSqlite())
+            {
+                await context.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE IF NOT EXISTS FavoriteRecipes (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId INTEGER NULL,
+                        SessionId INTEGER NULL,
+                        RecipeName TEXT NOT NULL,
+                        TeaBaseId TEXT NOT NULL DEFAULT 'black_tea',
+                        TeaBaseName TEXT NOT NULL DEFAULT '',
+                        MilkId TEXT NOT NULL DEFAULT 'fresh_milk',
+                        MilkName TEXT NOT NULL DEFAULT '',
+                        Size TEXT NOT NULL DEFAULT 'M',
+                        SugarLevel TEXT NOT NULL DEFAULT '50%',
+                        IceLevel TEXT NOT NULL DEFAULT '70%',
+                        ToppingIdsJson TEXT NOT NULL DEFAULT '[]',
+                        ToppingNamesJson TEXT NOT NULL DEFAULT '[]',
+                        UnitPrice NUMERIC NOT NULL DEFAULT 0,
+                        Notes TEXT NOT NULL DEFAULT '',
+                        IsReferenceFormula INTEGER NOT NULL DEFAULT 0,
+                        CreatedAt TEXT NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS AICartItems (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UserId INTEGER NULL,
+                        SessionId INTEGER NULL,
+                        ProductId INTEGER NULL,
+                        ProductName TEXT NOT NULL,
+                        ItemType TEXT NOT NULL DEFAULT 'DRINK',
+                        ImageUrl TEXT NOT NULL DEFAULT '',
+                        Size TEXT NOT NULL DEFAULT 'M',
+                        SugarLevel TEXT NOT NULL DEFAULT '50%',
+                        IceLevel TEXT NOT NULL DEFAULT '70%',
+                        SpicyLevel TEXT NOT NULL DEFAULT 'Không cay',
+                        DippingSauce TEXT NOT NULL DEFAULT 'Tương ớt',
+                        PortionSize TEXT NOT NULL DEFAULT 'Tiêu chuẩn',
+                        UnitPrice NUMERIC NOT NULL DEFAULT 0,
+                        Quantity INTEGER NOT NULL DEFAULT 1,
+                        TotalPrice NUMERIC NOT NULL DEFAULT 0,
+                        IsCustomDIY INTEGER NOT NULL DEFAULT 0,
+                        CustomNotes TEXT NOT NULL DEFAULT '',
+                        ToppingsJson TEXT NOT NULL DEFAULT '[]',
+                        CreatedAt TEXT NOT NULL
+                    );
+                ");
+            }
+            else
+            {
+                await context.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE IF NOT EXISTS FavoriteRecipes (
+                        Id INT AUTO_INCREMENT PRIMARY KEY,
+                        UserId INT NULL,
+                        SessionId INT NULL,
+                        RecipeName VARCHAR(150) NOT NULL,
+                        TeaBaseId VARCHAR(50) NOT NULL DEFAULT 'black_tea',
+                        TeaBaseName VARCHAR(100) NOT NULL DEFAULT '',
+                        MilkId VARCHAR(50) NOT NULL DEFAULT 'fresh_milk',
+                        MilkName VARCHAR(100) NOT NULL DEFAULT '',
+                        Size VARCHAR(20) NOT NULL DEFAULT 'M',
+                        SugarLevel VARCHAR(20) NOT NULL DEFAULT '50%',
+                        IceLevel VARCHAR(20) NOT NULL DEFAULT '70%',
+                        ToppingIdsJson TEXT NOT NULL,
+                        ToppingNamesJson TEXT NOT NULL,
+                        UnitPrice DECIMAL(12,2) NOT NULL DEFAULT 0,
+                        Notes VARCHAR(500) NOT NULL DEFAULT '',
+                        IsReferenceFormula TINYINT(1) NOT NULL DEFAULT 0,
+                        CreatedAt DATETIME NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS AICartItems (
+                        Id INT AUTO_INCREMENT PRIMARY KEY,
+                        UserId INT NULL,
+                        SessionId INT NULL,
+                        ProductId INT NULL,
+                        ProductName VARCHAR(150) NOT NULL,
+                        ItemType VARCHAR(30) NOT NULL DEFAULT 'DRINK',
+                        ImageUrl VARCHAR(500) NOT NULL DEFAULT '',
+                        Size VARCHAR(30) NOT NULL DEFAULT 'M',
+                        SugarLevel VARCHAR(30) NOT NULL DEFAULT '50%',
+                        IceLevel VARCHAR(30) NOT NULL DEFAULT '70%',
+                        SpicyLevel VARCHAR(50) NOT NULL DEFAULT 'Không cay',
+                        DippingSauce VARCHAR(100) NOT NULL DEFAULT 'Tương ớt',
+                        PortionSize VARCHAR(50) NOT NULL DEFAULT 'Tiêu chuẩn',
+                        UnitPrice DECIMAL(12,2) NOT NULL DEFAULT 0,
+                        Quantity INT NOT NULL DEFAULT 1,
+                        TotalPrice DECIMAL(12,2) NOT NULL DEFAULT 0,
+                        IsCustomDIY TINYINT(1) NOT NULL DEFAULT 0,
+                        CustomNotes VARCHAR(500) NOT NULL DEFAULT '',
+                        ToppingsJson TEXT NOT NULL,
+                        CreatedAt DATETIME NOT NULL
+                    );
+                ");
+            }
+        }
+        catch
+        {
+            // Safe fallback
+        }
 
         try
         {

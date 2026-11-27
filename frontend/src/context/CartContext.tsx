@@ -7,10 +7,11 @@ import { AuthRequiredModal } from "@/components/auth/AuthRequiredModal";
 
 interface CartContextType {
   items: CartItem[];
-  addItem: (item: Omit<CartItem, "id">) => boolean;
+  addItem: (item: Omit<CartItem, "id">, allowGuestForAgent?: boolean) => boolean;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, delta: number) => void;
   clearCart: () => void;
+  syncCartFromAgent: (agentCart: CartItem[]) => void;
   cartCount: number;
   subtotal: number;
   openAuthModal: (msg?: string) => void;
@@ -22,6 +23,7 @@ const CartContext = createContext<CartContextType>({
   removeItem: () => {},
   updateQuantity: () => {},
   clearCart: () => {},
+  syncCartFromAgent: () => {},
   cartCount: 0,
   subtotal: 0,
   openAuthModal: () => {},
@@ -85,13 +87,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .join(",")}-${i.customNotes || ""}`;
   };
 
-  const addItem = (item: Omit<CartItem, "id">): boolean => {
-    if (!user) {
+  const addItem = (item: Omit<CartItem, "id">, allowGuestForAgent: boolean = false): boolean => {
+    if (!user && !allowGuestForAgent) {
       openAuthModal("Bạn cần đăng nhập hoặc đăng ký tài khoản để thêm món ăn hoặc trà sữa vào giỏ hàng!");
       return false;
     }
 
-    if (user.role !== "Customer" && user.role !== "Staff") {
+    if (user && user.role !== "Customer" && user.role !== "Staff" && user.role !== "Admin" && user.role !== "Manager") {
       alert(`Tài khoản vai trò ${user.role} không có quyền đặt món. Chỉ tài khoản Khách Hàng và Nhân Viên mới có thể đặt món.`);
       return false;
     }
@@ -153,6 +155,26 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("milky_cart_guest");
   };
 
+  const syncCartFromAgent = (agentCart: CartItem[]) => {
+    const normalized: CartItem[] = (agentCart || []).map((c, idx) => ({
+      ...c,
+      id: c.id || `item_agent_${Date.now()}_${idx}`,
+      itemType: (c.itemType as "DRINK" | "FOOD" | "COMBO") || "DRINK",
+      size: c.size || "M",
+      unitPrice: Number(c.unitPrice) || 0,
+      quantity: Number(c.quantity) || 1,
+      totalPrice: Number(c.totalPrice) || (Number(c.unitPrice) || 0) * (Number(c.quantity) || 1),
+      isCustomDIY: Boolean(c.isCustomDIY),
+      toppings: (c.toppings || []).map((t) => ({
+        toppingId: Number(t.toppingId) || 1,
+        name: t.name || "Topping",
+        price: Number(t.price) || 0,
+        quantity: Number(t.quantity) || 1,
+      })),
+    }));
+    setItems(normalized);
+  };
+
   const cartCount = items.reduce((acc, i) => acc + i.quantity, 0);
   const subtotal = items.reduce((acc, i) => acc + i.totalPrice, 0);
 
@@ -164,6 +186,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeItem,
         updateQuantity,
         clearCart,
+        syncCartFromAgent,
         cartCount,
         subtotal,
         openAuthModal,

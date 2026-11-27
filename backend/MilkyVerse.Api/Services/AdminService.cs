@@ -29,16 +29,16 @@ public class AdminService : IAdminService
     public async Task<ApiResponse<DashboardSummaryDto>> GetDashboardSummaryAsync()
     {
         var revenue = await _context.Orders
-            .Where(o => o.Status == "Completed" || o.PaymentStatus == "Paid")
+            .Where(o => o.Status == "Completed" || o.Status == "Delivered" || o.PaymentStatus == "Paid")
             .SumAsync(o => (decimal?)o.TotalAmount) ?? 0;
 
         var totalOrders = await _context.Orders.CountAsync();
 
         var processingOrders = await _context.Orders
-            .CountAsync(o => o.Status == "Pending" || o.Status == "Confirmed" || o.Status == "Preparing" || o.Status == "Delivering");
+            .CountAsync(o => o.Status == "Pending" || o.Status == "PendingConfirmation" || o.Status == "Confirmed" || o.Status == "Preparing" || o.Status == "ReadyForPickup" || o.Status == "Delivering");
 
         var pendingOrdersCount = await _context.Orders
-            .CountAsync(o => o.Status == "Pending");
+            .CountAsync(o => o.Status == "Pending" || o.Status == "PendingConfirmation");
 
         var deliveringOrdersCount = await _context.Orders
             .CountAsync(o => o.Status == "Delivering");

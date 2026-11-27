@@ -49,13 +49,17 @@ public class DeliveryController : ControllerBase
     [Authorize(Roles = "Admin,Manager,Staff")]
     public async Task<IActionResult> AssignShipper([FromBody] AssignShipperRequest request)
     {
-        var result = await _deliveryService.AssignShipperAsync(request);
+        int? actorId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null;
+        var actorName = User.FindFirstValue(ClaimTypes.Name);
+        var actorRole = User.FindFirstValue(ClaimTypes.Role);
+
+        var result = await _deliveryService.AssignShipperAsync(request, actorId, actorName, actorRole);
         if (!result.Success) return BadRequest(result);
         return Ok(result);
     }
 
     [HttpPut("orders/{orderId:int}/status")]
-    [Authorize(Roles = "DeliveryStaff,Manager,Admin")]
+    [Authorize(Roles = "DeliveryStaff")]
     public async Task<IActionResult> UpdateDeliveryStatus(int orderId, [FromBody] UpdateDeliveryStatusRequest request)
     {
         var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -65,7 +69,14 @@ public class DeliveryController : ControllerBase
         }
 
         var result = await _deliveryService.UpdateDeliveryStatusAsync(shipperId, orderId, request);
-        if (!result.Success) return BadRequest(result);
+        if (!result.Success)
+        {
+            if (result.Message.StartsWith("FORBIDDEN:", StringComparison.Ordinal))
+            {
+                return StatusCode(403, result);
+            }
+            return BadRequest(result);
+        }
         return Ok(result);
     }
 

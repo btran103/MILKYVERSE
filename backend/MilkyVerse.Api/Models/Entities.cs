@@ -431,6 +431,10 @@ public class Order
     public DateTime? PaymentExpiresAt { get; set; }
     public DateTime? PaidAt { get; set; }
 
+    public int? PaymentConfirmedByUserId { get; set; }
+    [MaxLength(150)]
+    public string? PaymentConfirmedByName { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 
@@ -591,6 +595,8 @@ public class DeliveryAssignment
     public decimal CodAmount { get; set; } = 0;
 
     public bool IsCodCollected { get; set; } = false;
+    public DateTime? CodCollectedAt { get; set; }
+    public int? CollectedByUserId { get; set; }
     public bool CodReconciled { get; set; } = false;
 
     [MaxLength(255)]
@@ -617,6 +623,12 @@ public class OrderStatusHistory
 
     [MaxLength(255)]
     public string Note { get; set; } = string.Empty;
+
+    public int? ChangedByUserId { get; set; }
+    [MaxLength(150)]
+    public string? ChangedByName { get; set; }
+    [MaxLength(50)]
+    public string? ChangedByRole { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -693,6 +705,7 @@ public class ChatSession
     public string SessionTitle { get; set; } = "Trò chuyện mới";
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
 
     public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }
@@ -707,12 +720,119 @@ public class ChatMessage
 
     [Required]
     [MaxLength(20)]
-    public string SenderRole { get; set; } = "User"; // User, Assistant
+    public string SenderRole { get; set; } = "User"; // User, Assistant, Tool
 
     [Required]
     public string Content { get; set; } = string.Empty;
 
     public string? SuggestedDrinkJson { get; set; }
+    public string? ToolCallsJson { get; set; }
+    public string? AgentPayloadJson { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class FavoriteRecipe
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int? UserId { get; set; }
+    public User? User { get; set; }
+
+    public int? SessionId { get; set; }
+
+    [Required]
+    [MaxLength(150)]
+    public string RecipeName { get; set; } = string.Empty;
+
+    [MaxLength(50)]
+    public string TeaBaseId { get; set; } = "black_tea";
+
+    [MaxLength(100)]
+    public string TeaBaseName { get; set; } = string.Empty;
+
+    [MaxLength(50)]
+    public string MilkId { get; set; } = "fresh_milk";
+
+    [MaxLength(100)]
+    public string MilkName { get; set; } = string.Empty;
+
+    [MaxLength(20)]
+    public string Size { get; set; } = "M";
+
+    [MaxLength(20)]
+    public string SugarLevel { get; set; } = "50%";
+
+    [MaxLength(20)]
+    public string IceLevel { get; set; } = "70%";
+
+    public string ToppingIdsJson { get; set; } = "[]";
+    public string ToppingNamesJson { get; set; } = "[]";
+
+    [Column(TypeName = "decimal(12,2)")]
+    public decimal UnitPrice { get; set; }
+
+    [MaxLength(500)]
+    public string Notes { get; set; } = string.Empty;
+
+    public bool IsReferenceFormula { get; set; } = false;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class AICartItem
+{
+    [Key]
+    public int Id { get; set; }
+
+    public int? UserId { get; set; }
+    public int? SessionId { get; set; }
+
+    public int? ProductId { get; set; }
+
+    [Required]
+    [MaxLength(150)]
+    public string ProductName { get; set; } = string.Empty;
+
+    [MaxLength(30)]
+    public string ItemType { get; set; } = "DRINK";
+
+    [MaxLength(500)]
+    public string ImageUrl { get; set; } = string.Empty;
+
+    [MaxLength(30)]
+    public string Size { get; set; } = "M";
+
+    [MaxLength(30)]
+    public string SugarLevel { get; set; } = "50%";
+
+    [MaxLength(30)]
+    public string IceLevel { get; set; } = "70%";
+
+    [MaxLength(50)]
+    public string SpicyLevel { get; set; } = "Không cay";
+
+    [MaxLength(100)]
+    public string DippingSauce { get; set; } = "Tương ớt";
+
+    [MaxLength(50)]
+    public string PortionSize { get; set; } = "Tiêu chuẩn";
+
+    [Column(TypeName = "decimal(12,2)")]
+    public decimal UnitPrice { get; set; }
+
+    public int Quantity { get; set; } = 1;
+
+    [Column(TypeName = "decimal(12,2)")]
+    public decimal TotalPrice { get; set; }
+
+    public bool IsCustomDIY { get; set; } = false;
+
+    [MaxLength(500)]
+    public string CustomNotes { get; set; } = string.Empty;
+
+    public string ToppingsJson { get; set; } = "[]";
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

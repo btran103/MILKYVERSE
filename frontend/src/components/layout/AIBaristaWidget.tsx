@@ -4,47 +4,52 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { api } from "@/lib/api";
-import { AIChatMessage, SuggestedDrink } from "@/types";
+import {
+  AIChatMessage,
+  AIDrinkCustomizationCard,
+  AIRecipeCard,
+  AIStatusResponse,
+  SuggestedDrink,
+} from "@/types";
 import { useCart } from "@/context/CartContext";
+import {
+  AIThinkingIndicator,
+  ChatMessage,
+  SuggestedPrompts,
+} from "@/components/ai/AgentCards";
 import {
   Bot,
   Sparkles,
   Send,
   X,
-  ShoppingBag,
-  Check,
   ExternalLink,
   ChevronDown,
   Minimize2,
-  KeyRound,
-  Eye,
-  EyeOff,
 } from "lucide-react";
+
+const WIDGET_PROMPTS = [
+  "💸 Có 40k uống trà sữa ít ngọt có trân châu",
+  "🍵 Thêm 2 ly trà sữa matcha (1 ít đường, 1 bình thường)",
+  "🧪 Tự pha Ô long sữa yến mạch Size L 30% đường",
+  "🍯 Đang bị ho / đau họng uống gì ấm?",
+  "🛒 Xem giỏ hàng của tôi",
+  "📦 Kiểm tra đơn hàng của tôi",
+];
 
 export const AIBaristaWidget: React.FC = () => {
   const pathname = usePathname();
-  const { addItem } = useCart();
+  const { items: cartItems, addItem, syncCartFromAgent } = useCart();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [showKeyBox, setShowKeyBox] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [aiStatus, setAiStatus] = useState<{
-    isConfigured: boolean;
-    provider: string;
-    activeModel: string;
-    maskedApiKey: string;
-  } | null>(null);
-  const [savingKey, setSavingKey] = useState(false);
-  const [keyStatusMsg, setKeyStatusMsg] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<AIStatusResponse | null>(null);
   const [messages, setMessages] = useState<AIChatMessage[]>([
     {
       id: "welcome",
       role: "assistant",
       content:
-        "Xin chào! Mình là Milky ✨ - AI Barista thông minh của MilkyVerse. Bạn cần tìm món uống thanh nhiệt, đồ uống ít ngọt, không caffeine cho buổi tối hay muốn kiểm tra đơn hàng nè?",
+        "Xin chào! Mình là **MILKY AI BARISTA** ✨ — AI Agent của MilkyVerse. Mình có thể tìm đồ uống theo ngân sách, tự phối công thức DIY, thêm món vào giỏ hàng hoặc kiểm tra đơn giúp bạn ngay tại đây!",
       isAiModelLive: true,
+      modelName: "MILKY AI AGENT",
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -54,10 +59,11 @@ export const AIBaristaWidget: React.FC = () => {
   const [sessionId, setSessionId] = useState<number | undefined>(undefined);
   const [quickAddedId, setQuickAddedId] = useState<number | null>(null);
   const [showTooltip, setShowTooltip] = useState(true);
+  const [toastText, setToastText] = useState<string | null>(null);
+  const [prompts, setPrompts] = useState<string[]>(WIDGET_PROMPTS);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Hide widget if already on the dedicated full-page /ai-barista
   const isDedicatedPage = pathname === "/ai-barista";
 
   const scrollToBottom = () => {
@@ -68,9 +74,10 @@ export const AIBaristaWidget: React.FC = () => {
     if (isOpen) {
       scrollToBottom();
       setShowTooltip(false);
-      const savedKey = typeof window !== "undefined" ? localStorage.getItem("milky_ai_api_key") : null;
-      if (savedKey) {
-        setApiKeyInput(savedKey);
+      // Clean up any legacy client-side API key from localStorage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("milky_ai_api_key");
+        localStorage.removeItem("milky_ai_provider");
       }
       api
         .getAIStatus()
@@ -78,52 +85,6 @@ export const AIBaristaWidget: React.FC = () => {
         .catch(() => {});
     }
   }, [messages, loading, isOpen]);
-
-  const handleSaveWidgetApiKey = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSavingKey(true);
-    setKeyStatusMsg(null);
-    setSaveSuccess(false);
-    const clean = apiKeyInput.trim();
-    const masked = clean.length > 8 ? `${clean.slice(0, 4)}...${clean.slice(-4)}` : "****";
-
-    if (typeof window !== "undefined") {
-      if (clean) localStorage.setItem("milky_ai_api_key", clean);
-      else localStorage.removeItem("milky_ai_api_key");
-    }
-
-    try {
-      const st = await api.configureAIApiKey({ apiKey: clean });
-      setAiStatus(st);
-      setSaveSuccess(true);
-      setKeyStatusMsg(`✅ Đã lưu & kết nối API Key (${st.maskedApiKey || masked})!`);
-    } catch {
-      // Even if old backend process doesn't have /api/ai/config yet, localStorage is saved and passed on every /api/ai/chat request
-      setAiStatus({
-        isConfigured: Boolean(clean),
-        provider: "Google Gemini API",
-        activeModel: "gemini-2.5-flash",
-        maskedApiKey: clean ? masked : "",
-      });
-      setSaveSuccess(true);
-      setKeyStatusMsg(`✅ Đã lưu API Key (${masked}) và kích hoạt liên kết!`);
-    } finally {
-      setSavingKey(false);
-      setTimeout(() => {
-        setSaveSuccess(false);
-      }, 3000);
-    }
-  };
-
-  // Dataset-aligned quick prompt chips
-  const datasetPrompts = [
-    "🍯 Đang bị ho / đau họng uống gì?",
-    "🌙 Uống tối không caffeine",
-    "☕ Cần tỉnh táo chạy deadline",
-    "🥗 Ít ngọt / Healthy 0% đường",
-    "🍑 Trà mát lạnh dưới 40k",
-    "🍟 Ăn vặt nhâm nhi cùng trà sữa",
-  ];
 
   const handleSend = async (messageText?: string) => {
     const textToSend = messageText || inputMessage;
@@ -141,16 +102,71 @@ export const AIBaristaWidget: React.FC = () => {
     setLoading(true);
 
     try {
-      const savedKey = typeof window !== "undefined" ? localStorage.getItem("milky_ai_api_key") || undefined : undefined;
-      const savedProvider = typeof window !== "undefined" ? localStorage.getItem("milky_ai_provider") || undefined : undefined;
-      const res = await api.sendAIChat(textToSend.trim(), sessionId, savedKey, savedProvider);
+      const res = await api.sendAIChat(textToSend.trim(), sessionId, cartItems);
       setSessionId(res.sessionId);
+
+      if (res.cartAction && Array.isArray(res.cartAction.currentCart)) {
+        syncCartFromAgent(res.cartAction.currentCart);
+      }
+
+      if (res.actions && res.actions.length > 0) {
+        const addedNames: string[] = [];
+        for (const act of res.actions) {
+          if (act.type === "ADD_TO_CART" && act.payload) {
+            const p = act.payload;
+            addedNames.push(`${p.quantity || 1}x ${p.name}`);
+            if (!res.cartAction) {
+              addItem(
+                {
+                  productId: p.productId,
+                  name: p.name,
+                  imageUrl: p.imageUrl,
+                  itemType: p.itemType || "DRINK",
+                  size: p.size || "M",
+                  sugarLevel: p.sugarLevel ?? "50%",
+                  iceLevel: p.iceLevel ?? "70%",
+                  unitPrice: Number(p.unitPrice) || 0,
+                  quantity: Number(p.quantity) || 1,
+                  totalPrice: Number(p.totalPrice) || Number(p.unitPrice) || 0,
+                  isCustomDIY: Boolean(p.isCustomDIY),
+                  customNotes: p.customNotes || "",
+                  toppings: Array.isArray(p.toppings) ? p.toppings : [],
+                },
+                true
+              );
+            }
+          } else if (act.type === "APPLY_COUPON" && act.payload?.code) {
+            if (typeof window !== "undefined") {
+              localStorage.setItem("milky_pending_promo", act.payload.code);
+            }
+            setToastText(`🎟️ Đã áp mã ${act.payload.code}`);
+            setTimeout(() => setToastText(null), 3000);
+          }
+        }
+        if (addedNames.length > 0) {
+          setToastText(`✅ Đã thêm ${addedNames.join(", ")} vào giỏ!`);
+          setTimeout(() => setToastText(null), 3000);
+        }
+      }
+
+      if (res.suggestedPrompts && res.suggestedPrompts.length > 0) {
+        setPrompts(res.suggestedPrompts);
+      }
 
       const assistantMsg: AIChatMessage = {
         id: "a_" + Date.now(),
         role: "assistant",
         content: res.reply,
-        suggestedDrinks: (res.suggestedDrinks as unknown as SuggestedDrink[]) || [],
+        suggestedDrinks: res.suggestedDrinks || [],
+        actions: res.actions || [],
+        recipes: res.recipes || [],
+        customizations: res.customizations || [],
+        cartAction: res.cartAction,
+        orders: res.orders || [],
+        payment: res.payment,
+        inventoryReport: res.inventoryReport,
+        adminAnalytics: res.adminAnalytics,
+        executedTools: res.executedTools || [],
         isAiModelLive: res.isAiModelLive,
         modelName: res.modelName,
         timestamp: new Date().toISOString(),
@@ -173,26 +189,27 @@ export const AIBaristaWidget: React.FC = () => {
     }
   };
 
-  const handleQuickAdd = (drink: SuggestedDrink) => {
+  const handleQuickAddDrink = (drink: SuggestedDrink) => {
     const id = drink.productId || 1;
-    const success = addItem({
-      productId: id,
-      name: drink.name,
-      size: "M",
-      sugarLevel: drink.sugarRecommend?.includes("%") ? drink.sugarRecommend : "50%",
-      iceLevel: drink.iceRecommend?.includes("%") ? drink.iceRecommend : "70%",
-      unitPrice: drink.estimatedPrice,
-      quantity: 1,
-      totalPrice: drink.estimatedPrice,
-      isCustomDIY: false,
-      customNotes: `Được AI Barista gợi ý (${drink.sugarRecommend || "50%"}, ${drink.iceRecommend || "70%"})`,
-      toppings: (drink.recommendedToppings || []).map((tName, idx) => ({
-        toppingId: idx + 1,
-        name: tName,
-        price: 10000,
+    const isFood = drink.productType === "FOOD";
+    const success = addItem(
+      {
+        productId: id,
+        name: drink.name,
+        imageUrl: drink.imageUrl,
+        itemType: (drink.productType as "DRINK" | "FOOD" | "COMBO") || "DRINK",
+        size: isFood ? "Standard" : "M",
+        sugarLevel: isFood ? "" : drink.sugarRecommend || "50%",
+        iceLevel: isFood ? "" : drink.iceRecommend || "70%",
+        unitPrice: drink.estimatedPrice,
         quantity: 1,
-      })),
-    });
+        totalPrice: drink.estimatedPrice,
+        isCustomDIY: false,
+        customNotes: `Được Milky AI gợi ý (${drink.sugarRecommend || "50%"}, ${drink.iceRecommend || "70%"})`,
+        toppings: [],
+      },
+      true
+    );
 
     if (success) {
       setQuickAddedId(id);
@@ -200,44 +217,54 @@ export const AIBaristaWidget: React.FC = () => {
     }
   };
 
-  // Helper to render markdown links as clickable elements
-  const renderMessageContent = (content: string) => {
-    // Regex matches [Link Text](url)
-    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
+  const handleAddRecipe = (recipe: AIRecipeCard) => {
+    addItem(
+      {
+        name: recipe.recipeName,
+        imageUrl: "/images/products/tra-o-long-kem-cheese.png",
+        itemType: "DRINK",
+        size: recipe.size || "M",
+        sugarLevel: recipe.sugarLevel || "50%",
+        iceLevel: recipe.iceLevel || "70%",
+        unitPrice: recipe.unitPrice,
+        quantity: 1,
+        totalPrice: recipe.unitPrice,
+        isCustomDIY: true,
+        customNotes: `DIY AI: ${recipe.teaBaseName} x ${recipe.milkName}`,
+        toppings: (recipe.toppings || []).map((t) => ({
+          toppingId: t.id || 1,
+          name: t.name,
+          price: t.price,
+          quantity: 1,
+        })),
+      },
+      true
+    );
+  };
 
-    while ((match = linkRegex.exec(content)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(content.substring(lastIndex, match.index));
-      }
-      const label = match[1];
-      const href = match[2];
-      parts.push(
-        <Link
-          key={match.index}
-          href={href}
-          onClick={() => {
-            if (href.startsWith("/")) setIsOpen(false);
-          }}
-          className="text-[#6F4E37] underline font-bold hover:text-[#4A3324] inline-flex items-center gap-0.5 mx-0.5"
-        >
-          <span>{label}</span>
-          <ExternalLink className="w-3 h-3 inline" />
-        </Link>
-      );
-      lastIndex = linkRegex.lastIndex;
-    }
-
-    if (lastIndex < content.length) {
-      parts.push(content.substring(lastIndex));
-    }
-
-    return (
-      <div className="whitespace-pre-line text-xs sm:text-sm leading-relaxed">
-        {parts.map((p, idx) => (typeof p === "string" ? <span key={idx}>{p}</span> : p))}
-      </div>
+  const handleAddCustom = (custom: AIDrinkCustomizationCard) => {
+    addItem(
+      {
+        productId: custom.productId,
+        name: custom.productName,
+        imageUrl: custom.imageUrl || "/images/products/tra-sua-tran-chau-den.png",
+        itemType: "DRINK",
+        size: custom.size || "M",
+        sugarLevel: custom.sugarLevel || "50%",
+        iceLevel: custom.iceLevel || "70%",
+        unitPrice: custom.unitPrice,
+        quantity: custom.quantity || 1,
+        totalPrice: custom.totalPrice,
+        isCustomDIY: custom.isCustomDIY,
+        customNotes: custom.breakdown?.join(" | "),
+        toppings: (custom.selectedToppings || []).map((t) => ({
+          toppingId: t.id || 1,
+          name: t.name,
+          price: t.price,
+          quantity: 1,
+        })),
+      },
+      true
     );
   };
 
@@ -245,11 +272,10 @@ export const AIBaristaWidget: React.FC = () => {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-      {/* Tooltip bubble when closed */}
       {!isOpen && showTooltip && (
-        <div className="mb-3 px-3.5 py-2 bg-[#2D2522] text-white text-xs font-medium rounded-2xl shadow-xl flex items-center gap-2 border border-[#6F4E37]/30 animate-bounce">
-          <Sparkles className="w-3.5 h-3.5 text-[#F7D6D0]" />
-          <span>Hỏi Milky gợi ý đồ uống nhé!</span>
+        <div className="mb-3 px-3.5 py-2 bg-[#30251F] text-[#FFF9F3] text-xs font-medium rounded-2xl shadow-xl flex items-center gap-2 border border-[#9B6247]/40 animate-bounce">
+          <Sparkles className="w-3.5 h-3.5 text-[#9B6247]" />
+          <span>Hỏi Milky AI Agent đặt món & phối trà nhé!</span>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -262,39 +288,29 @@ export const AIBaristaWidget: React.FC = () => {
         </div>
       )}
 
-      {/* Floating Chat Window */}
       {isOpen && (
-        <div className="w-[92vw] sm:w-[400px] h-[550px] max-h-[82vh] bg-white rounded-3xl border border-[#EFE6DC] shadow-2xl flex flex-col overflow-hidden mb-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
+        <div className="w-[94vw] sm:w-[440px] h-[590px] max-h-[84vh] bg-white rounded-3xl border border-[#9B6247]/30 shadow-2xl flex flex-col overflow-hidden mb-3 animate-in fade-in slide-in-from-bottom-5 duration-200">
           {/* Header */}
-          <div className="bg-[#6F4E37] text-white px-4 py-3.5 flex items-center justify-between shrink-0 shadow-sm">
+          <div className="bg-[#30251F] text-[#FFF9F3] px-4 py-3.5 flex items-center justify-between shrink-0 shadow-sm">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center text-[#F7D6D0] relative">
+              <div className="w-9 h-9 rounded-xl bg-[#9B6247] flex items-center justify-center text-[#FFF9F3] relative">
                 <Bot className="w-5 h-5" />
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#6F4E37]" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#30251F]" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="font-extrabold text-sm text-white">AI Barista Milky</h3>
-                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-100 border border-emerald-300/30">
-                    {aiStatus?.isConfigured ? aiStatus.activeModel : "API Live"}
+                  <h3 className="font-extrabold text-sm text-[#FFF9F3]">MILKY AI BARISTA</h3>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-100 border border-emerald-300/30">
+                    {aiStatus?.isConfigured ? aiStatus.activeModel : "Agent Live"}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#F7D6D0]/80">Kết nối API Thực đơn & Đơn hàng</p>
+                <p className="text-[11px] text-[#FFF9F3]/75">
+                  AI Agent • Tư vấn • DIY • Giỏ hàng • Đơn hàng
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setShowKeyBox((p) => !p)}
-                title="Liên kết API Key (Gemini / Groq / OpenAI)"
-                className={`p-1.5 rounded-lg transition-colors ${
-                  showKeyBox || aiStatus?.isConfigured
-                    ? "bg-white/20 text-[#F7D6D0]"
-                    : "hover:bg-white/10 text-white/80 hover:text-white"
-                }`}
-              >
-                <KeyRound className="w-4 h-4" />
-              </button>
               <Link
                 href="/ai-barista"
                 title="Mở toàn màn hình"
@@ -312,246 +328,89 @@ export const AIBaristaWidget: React.FC = () => {
             </div>
           </div>
 
-          {showKeyBox && (
-            <form
-              onSubmit={handleSaveWidgetApiKey}
-              className="px-3.5 py-2.5 bg-[#FAF7F2] border-b border-[#EFE6DC] space-y-2 shrink-0 animate-in fade-in duration-150"
-            >
-              <div className="flex items-center justify-between text-[11px] font-bold text-[#2D2522]">
-                <span>🔑 Liên kết Gemini / Groq / OpenAI API Key</span>
-                {aiStatus?.maskedApiKey && (
-                  <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    Đang dùng: {aiStatus.maskedApiKey}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="relative flex-1">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Dán API Key (AIzaSy... / AQ... / gsk_... / sk-...)"
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    className="w-full pl-2.5 pr-8 py-1.5 rounded-lg bg-white border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((p) => !p)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
-                    title={showPassword ? "Ẩn khóa bí mật" : "Hiện khóa"}
-                  >
-                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-                <button
-                  type="submit"
-                  disabled={savingKey}
-                  className={`px-3 py-1.5 rounded-lg text-white text-xs font-bold transition-all cursor-pointer active:scale-95 flex items-center gap-1 shrink-0 ${
-                    saveSuccess
-                      ? "bg-emerald-600 hover:bg-emerald-700"
-                      : "bg-[#6F4E37] hover:bg-[#4A3324]"
-                  }`}
-                >
-                  {savingKey ? (
-                    "Đang lưu..."
-                  ) : saveSuccess ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Đã lưu!</span>
-                    </>
-                  ) : (
-                    "Lưu"
-                  )}
-                </button>
-              </div>
-              {keyStatusMsg && (
-                <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1 flex items-center justify-between">
-                  <span>{keyStatusMsg}</span>
-                  <button
-                    type="button"
-                    onClick={() => setKeyStatusMsg(null)}
-                    className="text-gray-400 hover:text-gray-600 ml-2"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-            </form>
-          )}
-
           {/* Messages Area */}
-          <div className="flex-1 p-3.5 overflow-y-auto space-y-3.5 bg-[#FAF7F2]/50 text-[#2D2522]">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-2.5 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+          {toastText && (
+            <div className="px-3.5 py-2 bg-emerald-600 text-white text-xs font-bold flex items-center justify-between shrink-0">
+              <span>{toastText}</span>
+              <Link
+                href="/cart"
+                onClick={() => setIsOpen(false)}
+                className="underline text-[11px] font-extrabold ml-2"
               >
-                {msg.role === "assistant" && (
-                  <div className="w-7 h-7 rounded-lg bg-[#6F4E37] text-[#F7D6D0] flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                    <Bot className="w-4 h-4" />
-                  </div>
-                )}
-
-                <div
-                  className={`max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed shadow-xs ${
-                    msg.role === "user"
-                      ? "bg-[#6F4E37] text-white rounded-tr-none"
-                      : "bg-white text-[#2D2522] border border-[#EFE6DC] rounded-tl-none"
-                  }`}
-                >
-                  {renderMessageContent(msg.content)}
-
-                  {/* Render Suggested Drinks Cards */}
-                  {msg.suggestedDrinks && msg.suggestedDrinks.length > 0 && (
-                    <div className="mt-2.5 pt-2.5 border-t border-[#EFE6DC] space-y-2">
-                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-[#6F4E37]">
-                        Món gợi ý cho bạn:
-                      </p>
-                      {msg.suggestedDrinks.map((drink, i) => (
-                        <div
-                          key={i}
-                          className="bg-[#FAF7F2] p-2.5 rounded-xl border border-[#EFE6DC] space-y-1.5"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <h5 className="font-extrabold text-[#2D2522] text-xs">
-                                {drink.name}
-                              </h5>
-                              <p className="text-[10px] text-[#786C65] line-clamp-1">{drink.description}</p>
-                            </div>
-                            <span className="text-xs font-black text-[#6F4E37] shrink-0">
-                              {drink.estimatedPrice.toLocaleString("vi-VN")}đ
-                            </span>
-                          </div>
-
-                          <div className="text-[10px] text-[#786C65] flex flex-wrap gap-1">
-                            <span className="px-1.5 py-0.5 rounded bg-white border border-[#EFE6DC] font-medium">
-                              Đường: {drink.sugarRecommend}
-                            </span>
-                            <span className="px-1.5 py-0.5 rounded bg-white border border-[#EFE6DC] font-medium">
-                              Đá: {drink.iceRecommend}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-1.5 pt-1">
-                            <button
-                              onClick={() => handleQuickAdd(drink)}
-                              className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 transition-all ${
-                                quickAddedId === (drink.productId || 1)
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-[#6F4E37] text-white hover:bg-[#4A3324]"
-                              }`}
-                            >
-                              {quickAddedId === (drink.productId || 1) ? (
-                                <>
-                                  <Check className="w-3 h-3" />
-                                  <span>Đã thêm giỏ</span>
-                                </>
-                              ) : (
-                                <>
-                                  <ShoppingBag className="w-3 h-3 text-[#F7D6D0]" />
-                                  <span>Thêm giỏ</span>
-                                </>
-                              )}
-                            </button>
-
-                            {drink.slug && drink.slug !== "diy" ? (
-                              <Link
-                                href={`/menu/${drink.slug}`}
-                                onClick={() => setIsOpen(false)}
-                                className="py-1.5 px-2 rounded-lg text-[11px] font-bold border border-[#6F4E37] text-[#6F4E37] hover:bg-[#F7D6D0]/30 transition-colors"
-                              >
-                                Xem món
-                              </Link>
-                            ) : (
-                              <Link
-                                href="/diy"
-                                onClick={() => setIsOpen(false)}
-                                className="py-1.5 px-2 rounded-lg text-[11px] font-bold border border-[#6F4E37] text-[#6F4E37] hover:bg-[#F7D6D0]/30 transition-colors"
-                              >
-                                Tự Pha
-                              </Link>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+                Xem giỏ
+              </Link>
+            </div>
+          )}
+          <div className="flex-1 p-3.5 overflow-y-auto space-y-4 bg-[#FFF9F3]/40 text-[#30251F]">
+            {messages.map((msg) => (
+              <ChatMessage
+                key={msg.id}
+                msg={msg}
+                quickAddedId={quickAddedId}
+                onAddDrinkToCart={handleQuickAddDrink}
+                onAddRecipeToCart={handleAddRecipe}
+                onAddCustomToCart={handleAddCustom}
+                onLinkClick={() => setIsOpen(false)}
+                compact={true}
+              />
             ))}
 
-            {loading && (
-              <div className="flex gap-2 items-center">
-                <div className="w-7 h-7 rounded-lg bg-[#6F4E37] text-[#F7D6D0] flex items-center justify-center">
-                  <Bot className="w-4 h-4 animate-spin" />
-                </div>
-                <div className="bg-white border border-[#EFE6DC] rounded-xl px-3 py-1.5 text-xs text-[#786C65] flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#6F4E37] animate-ping" />
-                  <span>Milky đang tìm món...</span>
-                </div>
-              </div>
-            )}
+            {loading && <AIThinkingIndicator label="Milky đang thực thi công cụ..." />}
 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Quick Prompts Carousel */}
-          <div className="px-2.5 py-2 bg-white border-t border-[#EFE6DC] flex gap-1.5 overflow-x-auto scrollbar-none shrink-0">
-            {datasetPrompts.map((p, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSend(p)}
-                disabled={loading}
-                className="px-2.5 py-1 rounded-lg bg-[#FAF7F2] border border-[#EFE6DC] text-[11px] font-medium text-[#2D2522] hover:border-[#6F4E37] hover:text-[#6F4E37] whitespace-nowrap transition-colors"
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          {/* Quick Prompt Chips */}
+          <SuggestedPrompts
+            prompts={prompts}
+            loading={loading}
+            onSelectPrompt={(p) => handleSend(p)}
+          />
 
-          {/* Input Bar */}
-          <div className="p-2.5 bg-white border-t border-[#EFE6DC] shrink-0">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
-              className="flex items-center gap-1.5"
+          {/* Input Form */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+            className="p-2.5 bg-white border-t border-[#9B6247]/20 flex items-center gap-2 shrink-0"
+          >
+            <input
+              type="text"
+              placeholder="Nhắn Milky tìm món, thêm giỏ, tự pha DIY..."
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              disabled={loading}
+              className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#FFF9F3] border border-[#9B6247]/25 text-xs text-[#30251F] focus:outline-none focus:border-[#9B6247]"
+            />
+            <button
+              type="submit"
+              disabled={!inputMessage.trim() || loading}
+              className="w-9 h-9 rounded-xl bg-[#30251F] text-[#FFF9F3] flex items-center justify-center hover:bg-[#9B6247] disabled:opacity-40 transition-all shrink-0 cursor-pointer"
             >
-              <input
-                type="text"
-                placeholder="Hỏi món, độ ngọt, hủy đơn..."
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                disabled={loading}
-                className="flex-1 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#EFE6DC] text-xs focus:outline-none focus:border-[#6F4E37]"
-              />
-              <button
-                type="submit"
-                disabled={loading || !inputMessage.trim()}
-                className="p-2 rounded-xl bg-[#6F4E37] text-white hover:bg-[#4A3324] disabled:opacity-50 transition-all shrink-0"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            </form>
-          </div>
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
         </div>
       )}
 
       {/* Floating Toggle Button */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
-        className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#6F4E37] to-[#8C6246] text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center border-2 border-white relative group"
-        aria-label="Mở AI Barista Milky"
+        aria-label="Mở trợ lý AI Barista MilkyVerse"
+        className={`w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 border-2 border-[#FFF9F3] cursor-pointer ${
+          isOpen
+            ? "bg-[#30251F] text-[#FFF9F3] rotate-90"
+            : "bg-gradient-to-tr from-[#30251F] to-[#9B6247] text-[#FFF9F3] hover:scale-105"
+        }`}
       >
         {isOpen ? (
           <ChevronDown className="w-6 h-6" />
         ) : (
-          <>
-            <Bot className="w-7 h-7 text-[#F7D6D0] group-hover:rotate-12 transition-transform" />
-            <span className="absolute top-1 right-1 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-white" />
-          </>
+          <div className="relative">
+            <Bot className="w-7 h-7 text-[#FFF9F3]" />
+            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-[#30251F] animate-pulse" />
+          </div>
         )}
       </button>
     </div>

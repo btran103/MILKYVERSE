@@ -108,14 +108,23 @@ export default function CounterStaffPage() {
     }
   }, [user, isStaff, isManager]);
 
-  // Mark Payment as Paid
-  const handleConfirmPayment = async (orderId: number) => {
+  // Confirm Order (For COD, only confirm order status without changing PaymentStatus from Unpaid)
+  const handleConfirmOrderOnly = async (orderId: number, paymentMethod: string) => {
     setActionLoading(true);
     try {
-      await api.updateOrderStatus(orderId, "Confirmed", "Paid", "Quầy đã xác nhận thanh toán thành công");
+      const isCod = (paymentMethod || "").toUpperCase() === "COD";
+      await api.updateOrderStatus(
+        orderId,
+        "Confirmed",
+        isCod ? undefined : "Paid",
+        isCod
+          ? "Quầy đã xác nhận đơn COD (Giữ trạng thái Unpaid, thu tiền mặt khi giao hàng)"
+          : "Quầy đã xác nhận thanh toán thành công"
+      );
       await loadData();
     } catch (err) {
-      console.error("Lỗi xác nhận thanh toán:", err);
+      alert(err instanceof Error ? err.message : "Lỗi xác nhận đơn hàng");
+      console.error("Lỗi xác nhận đơn:", err);
     } finally {
       setActionLoading(false);
     }
@@ -332,7 +341,9 @@ export default function CounterStaffPage() {
 
           <div className="space-y-4">
             {paginatedOrders.map((o) => {
-              const isPaid = o.paymentStatus === "Paid";
+              const isPaid = o.paymentStatus === "Paid" || o.paymentStatus === "Success";
+              const isCod = (o.paymentMethod || "").toUpperCase() === "COD";
+              const isAwaitingConfirm = o.status === "Pending" || o.status === "PendingConfirmation";
 
               return (
                 <div
@@ -347,9 +358,9 @@ export default function CounterStaffPage() {
                         </span>
                         <span
                           className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                            o.status === "Completed"
+                            o.status === "Completed" || o.status === "Delivered"
                               ? "bg-emerald-100 text-emerald-800"
-                              : o.status === "Cancelled"
+                              : o.status === "Cancelled" || o.status === "Rejected" || o.status === "DeliveryFailed"
                               ? "bg-red-100 text-red-800"
                               : "bg-blue-100 text-blue-800"
                           }`}
@@ -359,10 +370,10 @@ export default function CounterStaffPage() {
 
                         <span
                           className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                            isPaid ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800 animate-pulse"
+                            isPaid ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                           }`}
                         >
-                          {isPaid ? "✓ Đã thanh toán" : "⚠ Chờ xác nhận thanh toán"}
+                          {isPaid ? "✓ Đã thanh toán" : isCod ? "💵 COD: Chưa thu tiền (Unpaid)" : "⚠ Chờ xác nhận thanh toán"}
                         </span>
                       </div>
 
@@ -428,10 +439,23 @@ export default function CounterStaffPage() {
                   {/* Actions for Counter Staff */}
                   <div className="pt-3 border-t border-[#FAF7F2] flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Mark Payment Paid Button */}
-                      {!isPaid && (
+                      {/* Confirm order / online payment */}
+                      {isAwaitingConfirm && (
                         <button
-                          onClick={() => handleConfirmPayment(o.id)}
+                          onClick={() => handleConfirmOrderOnly(o.id, o.paymentMethod)}
+                          disabled={actionLoading}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm flex items-center gap-1.5 transition-all"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>
+                            {isCod ? "Xác Nhận Đơn COD (Chờ Shipper Thu Tiền)" : `Xác Nhận Đã Thanh Toán (${o.paymentMethod})`}
+                          </span>
+                        </button>
+                      )}
+
+                      {!isAwaitingConfirm && !isPaid && !isCod && o.status !== "Cancelled" && (
+                        <button
+                          onClick={() => handleConfirmOrderOnly(o.id, o.paymentMethod)}
                           disabled={actionLoading}
                           className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm flex items-center gap-1.5 transition-all"
                         >
@@ -440,14 +464,14 @@ export default function CounterStaffPage() {
                         </button>
                       )}
 
-                      {/* Bàn giao Shipper (when ready) */}
-                      {o.status === "ReadyForPickup" && (
+                      {/* Bàn giao Shipper (when confirmed/preparing/ready/failed) */}
+                      {(o.status === "ReadyForPickup" || o.status === "Confirmed" || o.status === "Preparing" || o.status === "DeliveryFailed") && (
                         <button
                           onClick={() => setAssigningOrder(o)}
                           className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-sm flex items-center gap-1.5 transition-all"
                         >
                           <Truck className="w-4 h-4" />
-                          <span>Bàn Giao Cho Shipper Đi Giao</span>
+                          <span>{o.status === "DeliveryFailed" ? "Phân Công Giao Lại" : "Bàn Giao Cho Shipper Đi Giao"}</span>
                         </button>
                       )}
 

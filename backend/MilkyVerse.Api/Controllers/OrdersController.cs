@@ -93,8 +93,17 @@ public class OrdersController : ControllerBase
     [Authorize(Roles = "Admin,Manager,Staff,DeliveryStaff")]
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateOrderStatusRequest request)
     {
-        var result = await _orderService.UpdateOrderStatusAsync(id, request);
-        if (!result.Success) return BadRequest(result);
+        int? actorId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null;
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        var name = User.FindFirstValue(ClaimTypes.Name);
+
+        var result = await _orderService.UpdateOrderStatusAsync(id, request, actorId, role, name);
+        if (!result.Success)
+        {
+            if (result.Message.StartsWith("FORBIDDEN:", StringComparison.Ordinal))
+                return StatusCode(403, result);
+            return BadRequest(result);
+        }
         return Ok(result);
     }
 
@@ -107,9 +116,16 @@ public class OrdersController : ControllerBase
         {
             userId = uId;
         }
+        var role = User.FindFirstValue(ClaimTypes.Role);
+        var name = User.FindFirstValue(ClaimTypes.Name);
 
-        var result = await _orderService.CancelOrderAsync(id, userId, request?.Reason ?? "Khách hàng tự hủy đơn trong vòng 2 phút");
-        if (!result.Success) return BadRequest(result);
+        var result = await _orderService.CancelOrderAsync(id, userId, request?.Reason ?? "Khách hàng hủy đơn theo yêu cầu", role, name);
+        if (!result.Success)
+        {
+            if (result.Message.StartsWith("FORBIDDEN:", StringComparison.Ordinal))
+                return StatusCode(403, result);
+            return BadRequest(result);
+        }
         return Ok(result);
     }
 

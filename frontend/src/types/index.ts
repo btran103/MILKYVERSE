@@ -256,6 +256,9 @@ export interface OrderStatusHistory {
   id: number;
   status: string;
   note: string;
+  changedByUserId?: number;
+  changedByName?: string;
+  changedByRole?: string;
   createdAt: string;
 }
 
@@ -299,8 +302,11 @@ export interface OrderResponse {
   cancelReason?: string;
   canCancel?: boolean;
   createdAt: string;
+  updatedAt?: string;
   paymentExpiresAt?: string;
   paidAt?: string;
+  paymentConfirmedByUserId?: number;
+  paymentConfirmedByName?: string;
   remainingPaymentSeconds?: number;
   serverTimeUtc?: string;
   items: OrderDetailResponse[];
@@ -312,8 +318,13 @@ export interface OrderResponse {
   shipperName?: string;
   shipperPhone?: string;
   deliveryStatus?: string;
+  deliveryFailureReason?: string;
+  assignedAt?: string;
+  pickedUpAt?: string;
+  deliveredAt?: string;
   codAmount?: number;
   isCodCollected?: boolean;
+  codCollectedAt?: string;
   codReconciled?: boolean;
 }
 
@@ -328,6 +339,141 @@ export interface SuggestedDrink {
   reason: string;
   slug?: string;
   imageUrl?: string;
+  productType?: "DRINK" | "FOOD" | "COMBO" | string;
+  categoryName?: string;
+  isInStock?: boolean;
+}
+
+export interface AIToolExecutionLog {
+  toolName: string;
+  argumentsJson: string;
+  resultSummary: string;
+  success: boolean;
+}
+
+export interface AIRecipeCard {
+  savedRecipeId?: number;
+  recipeName: string;
+  description: string;
+  teaBaseId: string;
+  teaBaseName: string;
+  milkId: string;
+  milkName: string;
+  size: string;
+  sugarLevel: string;
+  iceLevel: string;
+  toppings: Topping[];
+  unitPrice: number;
+  priceBreakdown: string[];
+  brewingSteps: string[];
+  isReferenceFormula: boolean;
+  isPurchasable: boolean;
+  diyLink: string;
+}
+
+export interface AIDrinkCustomizationCard {
+  productId?: number;
+  productName: string;
+  slug?: string;
+  imageUrl?: string;
+  isCustomDIY: boolean;
+  teaBaseId?: string;
+  milkId?: string;
+  size: string;
+  sugarLevel: string;
+  iceLevel: string;
+  selectedToppings: Topping[];
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  breakdown: string[];
+  isValid: boolean;
+}
+
+export interface AICartActionCard {
+  actionType: "ADD" | "UPDATE" | "REMOVE" | "CLEAR" | "VIEW" | string;
+  summary: string;
+  affectedItems: CartItem[];
+  currentCart: CartItem[];
+  totalItemsCount: number;
+  cartSubtotal: number;
+}
+
+export interface AIOrderStatusCard {
+  orderId: number;
+  orderCode: string;
+  status: string;
+  paymentStatus: string;
+  paymentMethod: string;
+  totalAmount: number;
+  customerName: string;
+  customerPhone: string;
+  shippingAddress: string;
+  createdAt: string;
+  itemSummaries: string[];
+  orderUrl: string;
+  paymentQrUrl?: string;
+  paymentPageUrl?: string;
+}
+
+export interface AIPaymentCard {
+  orderId: number;
+  orderCode: string;
+  paymentMethod: string;
+  paymentStatus: string;
+  amount: number;
+  qrCodeUrl?: string;
+  payUrl?: string;
+  bankName?: string;
+  accountNumber?: string;
+  accountName?: string;
+  transferContent?: string;
+  instructions: string;
+}
+
+export interface AIInventoryReportCard {
+  totalIngredients: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  highlightedIngredients: Ingredient[];
+  summaryNote: string;
+}
+
+export interface AIAdminAnalyticsCard {
+  totalRevenue: number;
+  totalOrders: number;
+  completedOrders: number;
+  pendingOrders: number;
+  cancelledOrders: number;
+  totalCustomers: number;
+  lowStockCount: number;
+  bestSellingProducts: Product[];
+  periodLabel: string;
+}
+
+export interface AIClientAction {
+  type: "ADD_TO_CART" | "OPEN_DIY" | "APPLY_COUPON" | string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: Record<string, any>;
+}
+
+export interface AIChatResponsePayload {
+  sessionId: number;
+  reply: string;
+  suggestedDrinks: SuggestedDrink[];
+  actions?: AIClientAction[];
+  recipes?: AIRecipeCard[];
+  customizations?: AIDrinkCustomizationCard[];
+  cartAction?: AICartActionCard;
+  orders?: AIOrderStatusCard[];
+  payment?: AIPaymentCard;
+  inventoryReport?: AIInventoryReportCard;
+  adminAnalytics?: AIAdminAnalyticsCard;
+  executedTools?: AIToolExecutionLog[];
+  suggestedPrompts?: string[];
+  isAiModelLive: boolean;
+  modelName?: string;
+  apiError?: string;
 }
 
 export interface AIChatMessage {
@@ -335,10 +481,64 @@ export interface AIChatMessage {
   role: "user" | "assistant";
   content: string;
   suggestedDrinks?: SuggestedDrink[];
+  actions?: AIClientAction[];
+  recipes?: AIRecipeCard[];
+  customizations?: AIDrinkCustomizationCard[];
+  cartAction?: AICartActionCard;
+  orders?: AIOrderStatusCard[];
+  payment?: AIPaymentCard;
+  inventoryReport?: AIInventoryReportCard;
+  adminAnalytics?: AIAdminAnalyticsCard;
+  executedTools?: AIToolExecutionLog[];
+  suggestedPrompts?: string[];
   isAiModelLive?: boolean;
   modelName?: string;
   apiError?: string;
   timestamp: string;
+}
+
+export interface AIConversationSummary {
+  id: number;
+  userId?: number;
+  sessionTitle: string;
+  createdAt: string;
+  updatedAt?: string;
+  messageCount: number;
+  lastMessagePreview: string;
+}
+
+export interface AIConversationDetail {
+  id: number;
+  userId?: number;
+  sessionTitle: string;
+  createdAt: string;
+  messages: {
+    id: number;
+    senderRole: string;
+    content: string;
+    suggestedDrinks: SuggestedDrink[];
+    agentPayload?: AIChatResponsePayload;
+    createdAt: string;
+  }[];
+}
+
+export interface FavoriteRecipe {
+  id: number;
+  userId?: number;
+  recipeName: string;
+  teaBaseId: string;
+  teaBaseName: string;
+  milkId: string;
+  milkName: string;
+  size: string;
+  sugarLevel: string;
+  iceLevel: string;
+  toppingIds: number[];
+  toppingNames: string[];
+  unitPrice: number;
+  notes: string;
+  isReferenceFormula: boolean;
+  createdAt: string;
 }
 
 export interface AIStatusResponse {
@@ -349,6 +549,7 @@ export interface AIStatusResponse {
   endpointUrl: string;
   activeMenuCount: number;
   activeToppingCount: number;
+  availableToolsCount?: number;
 }
 
 export interface DashboardSummary {

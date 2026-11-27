@@ -1,13 +1,18 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using MilkyVerse.Api.Data;
 using MilkyVerse.Api.Services;
+using MilkyVerse.Api.Services.AI;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
 builder.WebHost.UseUrls("http://localhost:5000");
 
 // 1. Controller, MVC Razor Views & JSON serialization
@@ -62,14 +67,36 @@ builder.Services.AddScoped<IDIYService, DIYService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IAIBaristaService, AIBaristaService>();
+builder.Services.AddSingleton<IToolRegistry, ToolRegistry>();
+builder.Services.AddScoped<IConversationService, ConversationService>();
+builder.Services.AddScoped<IGeminiService, GeminiService>();
+builder.Services.AddScoped<IToolExecutionService, ToolExecutionService>();
+builder.Services.AddScoped<IMilkyAIOrchestrator, MilkyAIOrchestrator>();
+builder.Services.AddScoped<IAgentTool, SearchMenuTool>();
+builder.Services.AddScoped<IAgentTool, GetProductDetailTool>();
+builder.Services.AddScoped<IAgentTool, ListToppingsTool>();
+builder.Services.AddScoped<IAgentTool, QuoteDiyDrinkTool>();
+builder.Services.AddScoped<IAgentTool, ValidateCouponTool>();
+builder.Services.AddScoped<IAgentTool, GetMyOrdersTool>();
+builder.Services.AddScoped<IAgentTool, GetOrderStatusTool>();
+builder.Services.AddScoped<IAgentTool, AddToCartTool>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IDeliveryService, DeliveryService>();
 builder.Services.AddScoped<IMomoPaymentService, MomoPaymentService>();
 builder.Services.AddScoped<ISePayService, SePayService>();
+builder.Services.AddHostedService<OnlinePaymentExpirationService>();
 builder.Services.AddHttpClient();
 
-// 4. JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "MilkyVerseSuperSecretKey2026MilkyWayGalaxySecurityBeverageApi!";
+// 4. JWT Authentication (Read from Environment Variable JWT_SECRET_KEY / user-secrets / appsettings.Local.json)
+var jwtKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+             ?? builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    jwtKey = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production"
+        ? throw new InvalidOperationException("JWT_SECRET_KEY environment variable or Jwt:Key user-secret is required in Production.")
+        : "MilkyVerseDevFallbackSecretKey2026ForLocalDevelopmentOnly!";
+}
+builder.Configuration["Jwt:Key"] = jwtKey;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "MilkyVerse";
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "MilkyVerseUsers";
 
@@ -89,6 +116,36 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+
+// 4b. Rate Limiting for POST /api/ai/chat (20 requests / minute / userId or IP)
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            "{\"success\":false,\"message\":\"Bạn đã gửi quá 20 tin nhắn/phút tới AI Barista. Vui lòng đợi ít giây rồi thử lại nhé!\"}",
+            cancellationToken);
+    };
+
+    options.AddPolicy("AiChatLimit", httpContext =>
+    {
+        var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var partitionKey = !string.IsNullOrWhiteSpace(userId)
+            ? $"user_{userId}"
+            : $"ip_{httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous"}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            QueueLimit = 0
+        });
+    });
+});
 
 // 5. CORS policy
 builder.Services.AddCors(options =>
@@ -126,6 +183,7 @@ app.UseSwaggerUI(c =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapControllerRoute(

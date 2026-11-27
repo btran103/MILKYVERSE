@@ -3,9 +3,10 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { ShipperDashboard } from "@/types";
+import { OrderResponse, ShipperDashboard } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { getDistinctOrderItemImage } from "@/lib/orderImageHelper";
+import { getOrderStatusMeta, getPaymentStatusMeta, isCodPayment } from "@/lib/orderStatus";
 import {
   Truck,
   Phone,
@@ -15,6 +16,9 @@ import {
   RotateCcw,
   Navigation,
   ExternalLink,
+  AlertTriangle,
+  Banknote,
+  ShieldCheck,
 } from "lucide-react";
 
 export default function DeliveryStaffPage() {
@@ -24,11 +28,17 @@ export default function DeliveryStaffPage() {
   const [dashboard, setDashboard] = useState<ShipperDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"ACTIVE" | "COMPLETED" | "ALL">("ACTIVE");
+  const [activeTab, setActiveTab] = useState<"ACTIVE" | "FAILED" | "COMPLETED">("ACTIVE");
 
-  // Failure modal
-  const [failingOrderId, setFailingOrderId] = useState<number | null>(null);
-  const [failureReason, setFailureReason] = useState("Khách không nghe máy");
+  // COD + Delivery success confirmation modal
+  const [deliveringOrder, setDeliveringOrder] = useState<OrderResponse | null>(null);
+  const [codConfirmedChecked, setCodConfirmedChecked] = useState(false);
+  const [deliveryNote, setDeliveryNote] = useState("");
+
+  // Failure / Rejection modal
+  const [failingOrder, setFailingOrder] = useState<OrderResponse | null>(null);
+  const [failureType, setFailureType] = useState<"DeliveryFailed" | "Rejected">("DeliveryFailed");
+  const [failureReason, setFailureReason] = useState("Khách không nghe máy (Gọi 3 lần)");
   const [failureNote, setFailureNote] = useState("");
 
   useEffect(() => {
@@ -58,8 +68,9 @@ export default function DeliveryStaffPage() {
   const handleUpdateStatus = async (
     orderId: number,
     status: string,
-    isCodCollected?: boolean,
-    reason?: string
+    isCodCollected = false,
+    reason?: string,
+    notes?: string
   ) => {
     setActionLoading(true);
     try {
@@ -67,7 +78,7 @@ export default function DeliveryStaffPage() {
         status,
         isCodCollected,
         failureReason: reason,
-        notes: reason || `Shipper cập nhật trạng thái: ${status}`,
+        notes: notes || reason || `Shipper cập nhật trạng thái: ${status}`,
       });
       await loadData();
     } catch (err: unknown) {
@@ -76,6 +87,38 @@ export default function DeliveryStaffPage() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleConfirmDeliveryModal = async () => {
+    if (!deliveringOrder) return;
+    const isCod = isCodPayment(deliveringOrder.paymentMethod);
+    if (isCod && !codConfirmedChecked) {
+      alert("Vui lòng tích xác nhận đã thu đủ tiền mặt COD từ khách hàng.");
+      return;
+    }
+
+    await handleUpdateStatus(
+      deliveringOrder.id,
+      "Delivered",
+      isCod ? codConfirmedChecked : false,
+      undefined,
+      deliveryNote.trim() || (isCod ? `Đã giao thành công & thu đủ ${deliveringOrder.totalAmount.toLocaleString("vi-VN")}đ COD` : "Đã giao hàng thành công")
+    );
+    setDeliveringOrder(null);
+    setCodConfirmedChecked(false);
+    setDeliveryNote("");
+  };
+
+  const handleConfirmFailureModal = async () => {
+    if (!failingOrder) return;
+    const fullReason = failureNote.trim() ? `${failureReason} — ${failureNote.trim()}` : failureReason;
+    if (!fullReason.trim()) {
+      alert("Vui lòng nhập lý do giao hàng thất bại.");
+      return;
+    }
+    await handleUpdateStatus(failingOrder.id, failureType, false, fullReason, fullReason);
+    setFailingOrder(null);
+    setFailureNote("");
   };
 
   const handleReconcileCod = async () => {
@@ -115,13 +158,20 @@ export default function DeliveryStaffPage() {
 
   const allOrders = dashboard?.orders || [];
   const activeOrders = allOrders.filter(
-    (o) => o.status === "Delivering" || o.deliveryStatus === "Assigned" || o.deliveryStatus === "PickedUp" || o.deliveryStatus === "InTransit"
+    (o) =>
+      o.status === "ReadyForPickup" ||
+      o.status === "Delivering" ||
+      (o.deliveryStatus === "Assigned" && o.status !== "Cancelled" && o.status !== "Delivered" && o.status !== "Completed" && o.status !== "DeliveryFailed" && o.status !== "Rejected")
+  );
+  const failedOrders = allOrders.filter(
+    (o) => o.status === "DeliveryFailed" || o.status === "Rejected" || o.deliveryStatus === "Failed" || o.deliveryStatus === "Rejected"
   );
   const completedOrders = allOrders.filter(
-    (o) => o.status === "Completed" || o.deliveryStatus === "Delivered"
+    (o) => o.status === "Delivered" || o.status === "Completed" || o.deliveryStatus === "Delivered"
   );
 
-  const displayedOrders = activeTab === "ACTIVE" ? activeOrders : activeTab === "COMPLETED" ? completedOrders : allOrders;
+  const displayedOrders =
+    activeTab === "ACTIVE" ? activeOrders : activeTab === "FAILED" ? failedOrders : completedOrders;
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -155,9 +205,9 @@ export default function DeliveryStaffPage() {
       {/* COD & KPI Status Banner */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-3xl border border-[#EFE6DC] shadow-sm space-y-1">
-          <span className="text-[11px] font-bold text-[#786C65] uppercase">Đơn Đang Giao</span>
-          <h3 className="text-2xl font-black text-blue-600">{dashboard?.inTransitOrders || activeOrders.length}</h3>
-          <p className="text-[10px] text-[#786C65]">Cần hoàn thành trong ngày</p>
+          <span className="text-[11px] font-bold text-[#786C65] uppercase">Đơn Đang Phụ Trách</span>
+          <h3 className="text-2xl font-black text-blue-600">{activeOrders.length}</h3>
+          <p className="text-[10px] text-[#786C65]">Chờ nhận & đang giao</p>
         </div>
 
         <div className="bg-white p-4 rounded-3xl border border-[#EFE6DC] shadow-sm space-y-1">
@@ -169,7 +219,7 @@ export default function DeliveryStaffPage() {
         <div className="col-span-2 bg-gradient-to-r from-[#6F4E37] to-[#4A3324] p-5 rounded-3xl text-white shadow-md space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs font-semibold text-[#F7D6D0]">Tiền Thu Hộ COD Cần Nộp Cho Quản Lý:</span>
+              <span className="text-xs font-semibold text-[#F7D6D0]">Tiền Thu Hộ COD Cần Nộp Đối Soát:</span>
               <h3 className="text-2xl sm:text-3xl font-black mt-0.5 text-amber-300">
                 {(dashboard?.totalCodPendingReconcile || 0).toLocaleString("vi-VN")}đ
               </h3>
@@ -183,7 +233,7 @@ export default function DeliveryStaffPage() {
             </button>
           </div>
           <p className="text-[11px] text-gray-200">
-            Tổng tiền mặt COD đã thu trong ca: {(dashboard?.totalCodCollected || 0).toLocaleString("vi-VN")}đ
+            Tổng tiền mặt COD đã thu thành công: {(dashboard?.totalCodCollected || 0).toLocaleString("vi-VN")}đ
           </p>
         </div>
       </div>
@@ -198,7 +248,18 @@ export default function DeliveryStaffPage() {
               : "bg-white border border-[#EFE6DC] text-[#2D2522]"
           }`}
         >
-          Cần Giao Ngay ({activeOrders.length})
+          Cần Giao ({activeOrders.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab("FAILED")}
+          className={`flex-1 py-2.5 rounded-2xl text-xs font-bold transition-all ${
+            activeTab === "FAILED"
+              ? "bg-rose-700 text-white shadow-sm"
+              : "bg-white border border-[#EFE6DC] text-rose-700"
+          }`}
+        >
+          Thất Bại / Từ Chối ({failedOrders.length})
         </button>
 
         <button
@@ -209,7 +270,7 @@ export default function DeliveryStaffPage() {
               : "bg-white border border-[#EFE6DC] text-[#2D2522]"
           }`}
         >
-          Lịch Sử Đã Giao ({completedOrders.length})
+          Đã Giao ({completedOrders.length})
         </button>
       </div>
 
@@ -219,35 +280,36 @@ export default function DeliveryStaffPage() {
           <div className="bg-white rounded-3xl p-10 text-center border border-[#EFE6DC] space-y-2">
             <Truck className="w-10 h-10 text-gray-400 mx-auto" />
             <h4 className="font-extrabold text-sm text-[#2D2522]">Không có đơn hàng nào trong mục này</h4>
-            <p className="text-xs text-[#786C65]">Khi quầy bán bàn giao đơn mới, bạn sẽ nhận được thông báo tại đây.</p>
+            <p className="text-xs text-[#786C65]">Khi quầy phân công đơn mới, danh sách sẽ tự động hiển thị tại đây.</p>
           </div>
         ) : (
           displayedOrders.map((order) => {
-            const isDelivered = order.status === "Completed" || order.deliveryStatus === "Delivered";
-            const isCOD = order.paymentMethod === "COD";
+            const isCOD = isCodPayment(order.paymentMethod);
+            const statusMeta = getOrderStatusMeta(order.status);
+            const paymentMeta = getPaymentStatusMeta(order.paymentStatus, order.paymentMethod);
+            const isDelivered = order.status === "Delivered" || order.status === "Completed";
+            const isDelivering = order.status === "Delivering";
+            const isFailedOrRejected = order.status === "DeliveryFailed" || order.status === "Rejected";
 
             return (
               <div
                 key={order.id}
                 className={`bg-white rounded-3xl p-5 border shadow-sm space-y-4 transition-all ${
-                  isDelivered ? "border-emerald-200 opacity-90" : "border-[#EFE6DC] hover:border-[#6F4E37]"
+                  isDelivered ? "border-emerald-200" : isFailedOrRejected ? "border-rose-200" : "border-[#EFE6DC] hover:border-[#6F4E37]"
                 }`}
               >
                 {/* Header card */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono font-black text-sm text-[#6F4E37] bg-[#FAF7F2] px-2.5 py-1 rounded-xl">
-                      {order.orderCode}
+                      #{order.orderCode}
                     </span>
-                    {isCOD ? (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[10px]">
-                        THU TIỀN MẶT COD
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                        ĐÃ THANH TOÁN (VIETQR)
-                      </span>
-                    )}
+                    <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] ${statusMeta.badgeClass}`}>
+                      {statusMeta.label}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full font-black text-[10px] ${paymentMeta.badgeClass}`}>
+                      {isCOD ? (paymentMeta.isPaid ? "ĐÃ THU COD" : "THU TIỀN MẶT COD") : paymentMeta.label}
+                    </span>
                   </div>
 
                   <span className="font-black text-base text-[#6F4E37]">
@@ -291,13 +353,19 @@ export default function DeliveryStaffPage() {
                       Lưu ý khách: {order.note}
                     </p>
                   )}
+
+                  {order.deliveryFailureReason && (
+                    <p className="text-[11px] font-semibold text-rose-800 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                      Lý do giao thất bại: {order.deliveryFailureReason}
+                    </p>
+                  )}
                 </div>
 
                 {/* Items Summary */}
                 <div className="space-y-1 text-xs">
-                  <span className="font-bold text-[#786C65] uppercase text-[10px]">Món Cần Giao:</span>
+                  <span className="font-bold text-[#786C65] uppercase text-[10px]">Món Cần Giao ({order.items?.length || 0} món):</span>
                   <div className="divide-y divide-gray-100">
-                    {order.items.map((it, idx) => {
+                    {(order.items || []).map((it, idx) => {
                       const itImg = getDistinctOrderItemImage(it, idx);
                       return (
                         <div key={idx} className="py-1.5 flex items-center justify-between gap-2">
@@ -305,7 +373,6 @@ export default function DeliveryStaffPage() {
                             <img src={itImg} alt={it.productName} className="w-7 h-7 rounded-lg object-cover shrink-0 border border-[#EFE6DC]" />
                             <span className="font-semibold text-[#2D2522] truncate">
                               {it.productName} ({it.portionSize || it.size})
-                              {it.spicyLevel && ` - ${it.spicyLevel}`}
                             </span>
                           </div>
                           <span className="font-bold text-[#6F4E37] shrink-0">x{it.quantity}</span>
@@ -315,49 +382,68 @@ export default function DeliveryStaffPage() {
                   </div>
                 </div>
 
-                {/* Action Buttons for active delivery */}
-                {!isDelivered ? (
+                {/* Action Buttons */}
+                {!isDelivered && order.status !== "Rejected" && order.status !== "Cancelled" ? (
                   <div className="space-y-2 pt-2 border-t">
-                    <div className="grid grid-cols-2 gap-2">
+                    {!isDelivering ? (
                       <button
-                        onClick={() => handleUpdateStatus(order.id, "InTransit")}
+                        onClick={() => handleUpdateStatus(order.id, "InTransit", false, undefined, "Shipper đã nhận hàng và bắt đầu giao tới khách")}
                         disabled={actionLoading}
-                        className="py-3 px-3 rounded-2xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-sm flex items-center justify-center gap-1.5"
+                        className="w-full py-3 px-3 rounded-2xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-sm flex items-center justify-center gap-1.5"
                       >
-                        <Navigation className="w-4 h-4" />
-                        <span>Đang giao xe</span>
+                        <Truck className="w-4 h-4" />
+                        <span>{order.status === "DeliveryFailed" ? "Nhận Giao Lại (Đang giao hàng)" : "Bắt Đầu Giao Hàng (Đang giao)"}</span>
                       </button>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          onClick={() => {
+                            setDeliveringOrder(order);
+                            setCodConfirmedChecked(false);
+                            setDeliveryNote("");
+                          }}
+                          disabled={actionLoading}
+                          className="py-3 px-3 rounded-2xl bg-emerald-600 text-white font-black text-xs hover:bg-emerald-700 shadow-md flex items-center justify-center gap-1.5"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>{isCOD ? `Giao Xong & Xác Nhận Thu COD (${order.totalAmount.toLocaleString("vi-VN")}đ)` : "Xác Nhận Giao Thành Công"}</span>
+                        </button>
 
-                      <button
-                        onClick={() => handleUpdateStatus(order.id, "Delivered", isCOD)}
-                        disabled={actionLoading}
-                        className="py-3 px-3 rounded-2xl bg-emerald-600 text-white font-black text-xs hover:bg-emerald-700 shadow-md flex items-center justify-center gap-1.5"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        <span>Giao xong {isCOD ? "+ Thu COD" : ""}</span>
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => setFailingOrderId(order.id)}
-                      className="w-full py-2 text-center text-xs text-red-600 font-bold hover:underline"
-                    >
-                      Báo giao không thành công
-                    </button>
+                        <button
+                          onClick={() => {
+                            setFailingOrder(order);
+                            setFailureType("DeliveryFailed");
+                            setFailureReason("Khách không nghe máy (Gọi 3 lần)");
+                            setFailureNote("");
+                          }}
+                          disabled={actionLoading}
+                          className="py-3 px-3 rounded-2xl bg-rose-50 text-rose-700 border border-rose-200 font-bold text-xs hover:bg-rose-100 flex items-center justify-center gap-1.5"
+                        >
+                          <AlertTriangle className="w-4 h-4" />
+                          <span>Giao Thất Bại / Từ Chối</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : (
+                ) : isDelivered ? (
                   <div className="p-2.5 rounded-2xl bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center justify-between border border-emerald-200">
                     <span className="flex items-center gap-1.5">
                       <CheckCircle className="w-4 h-4 text-emerald-600" />
                       Đã giao thành công
                     </span>
                     <span>
-                      {order.isCodCollected
-                        ? order.codReconciled
-                          ? "Đã nộp COD"
-                          : "Đã thu COD (Chờ nộp)"
-                        : "Đã thu"}
+                      {isCOD
+                        ? order.isCodCollected
+                          ? order.codReconciled
+                            ? "Đã nộp đối soát COD"
+                            : "Đã thu COD (Chờ nộp quầy)"
+                          : "Chưa thu COD"
+                        : "Thanh toán online"}
                     </span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-2xl bg-rose-50 text-rose-800 text-xs font-bold border border-rose-200">
+                    Đơn đã kết thúc ({statusMeta.label}) — Không ghi nhận thanh toán COD.
                   </div>
                 )}
               </div>
@@ -366,18 +452,111 @@ export default function DeliveryStaffPage() {
         )}
       </div>
 
-      {/* Failure Report Modal */}
-      {failingOrderId && (
+      {/* Delivery & Mandatory COD Collection Confirmation Modal */}
+      {deliveringOrder && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-[#EFE6DC] shadow-2xl space-y-4">
+            <div className="flex items-center gap-2 text-emerald-700 font-black">
+              <ShieldCheck className="w-5 h-5" />
+              <h3 className="text-base text-[#2D2522]">
+                Xác Nhận Giao Hàng #{deliveringOrder.orderCode}
+              </h3>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-[#FAF7F2] border border-[#EFE6DC] text-xs space-y-1.5">
+              <p><strong>Khách hàng:</strong> {deliveringOrder.customerName} ({deliveringOrder.customerPhone})</p>
+              <p><strong>Phương thức thanh toán:</strong> {deliveringOrder.paymentMethod}</p>
+              <p><strong>Tổng giá trị đơn:</strong> <span className="font-black text-[#6F4E37]">{deliveringOrder.totalAmount.toLocaleString("vi-VN")}đ</span></p>
+            </div>
+
+            {isCodPayment(deliveringOrder.paymentMethod) && (
+              <label className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-50 border-2 border-amber-300 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={codConfirmedChecked}
+                  onChange={(e) => setCodConfirmedChecked(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-emerald-600"
+                />
+                <span className="font-bold text-amber-950 leading-relaxed">
+                  <Banknote className="w-4 h-4 inline mr-1 text-amber-700" />
+                  Tôi xác nhận đã giao hàng tận tay khách và <strong>ĐÃ THU ĐỦ {deliveringOrder.totalAmount.toLocaleString("vi-VN")}đ tiền mặt COD</strong>. (Không tick không thể xác nhận thanh toán).
+                </span>
+              </label>
+            )}
+
+            <div className="text-xs space-y-1">
+              <label className="font-bold text-[#2D2522] block">Ghi chú giao hàng (tuỳ chọn):</label>
+              <input
+                type="text"
+                placeholder="Ví dụ: Đã giao trực tiếp cho anh/chị..."
+                value={deliveryNote}
+                onChange={(e) => setDeliveryNote(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-[#EFE6DC]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setDeliveringOrder(null)}
+                className="px-4 py-2 rounded-xl border border-[#EFE6DC] text-xs font-bold text-[#786C65]"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleConfirmDeliveryModal}
+                disabled={actionLoading || (isCodPayment(deliveringOrder.paymentMethod) && !codConfirmedChecked)}
+                className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-black hover:bg-emerald-700 disabled:opacity-40"
+              >
+                {actionLoading ? "Đang lưu..." : "Xác Nhận Hoàn Tất"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Failure / Rejection Report Modal */}
+      {failingOrder && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full border border-[#EFE6DC] shadow-2xl space-y-4">
             <div className="flex items-center gap-2 text-red-600 font-black">
               <XCircle className="w-5 h-5" />
-              <h3 className="text-base text-[#2D2522]">Báo Giao Thất Bại</h3>
+              <h3 className="text-base text-[#2D2522]">Báo Giao Thất Bại #{failingOrder.orderCode}</h3>
             </div>
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-bold text-[#2D2522] block mb-1">Lý do thất bại:</label>
+                <label className="font-bold text-[#2D2522] block mb-1">Phân loại kết quả:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFailureType("DeliveryFailed")}
+                    className={`p-2 rounded-xl border font-bold ${
+                      failureType === "DeliveryFailed"
+                        ? "bg-rose-600 text-white border-rose-600"
+                        : "bg-white border-[#EFE6DC] text-[#2D2522]"
+                    }`}
+                  >
+                    Giao thất bại (Giao lại)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFailureType("Rejected");
+                      setFailureReason("Khách từ chối nhận món");
+                    }}
+                    className={`p-2 rounded-xl border font-bold ${
+                      failureType === "Rejected"
+                        ? "bg-red-700 text-white border-red-700"
+                        : "bg-white border-[#EFE6DC] text-[#2D2522]"
+                    }`}
+                  >
+                    Khách từ chối nhận
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-[#2D2522] block mb-1">Nguyên nhân:</label>
                 <select
                   value={failureReason}
                   onChange={(e) => setFailureReason(e.target.value)}
@@ -405,20 +584,17 @@ export default function DeliveryStaffPage() {
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
-                onClick={() => setFailingOrderId(null)}
+                onClick={() => setFailingOrder(null)}
                 className="px-4 py-2 rounded-xl border text-xs font-bold"
               >
-                Hủy
+                Đóng
               </button>
               <button
-                onClick={() => {
-                  handleUpdateStatus(failingOrderId, "Failed", false, `${failureReason}: ${failureNote}`);
-                  setFailingOrderId(null);
-                }}
+                onClick={handleConfirmFailureModal}
                 disabled={actionLoading}
                 className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700"
               >
-                Xác nhận báo lỗi
+                Xác nhận báo sự cố
               </button>
             </div>
           </div>

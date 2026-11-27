@@ -10,9 +10,10 @@ public interface IOrderService
     Task<ApiResponse<OrderResponse>> CreateOrderAsync(int? userId, CreateOrderRequest request);
     Task<ApiResponse<List<OrderResponse>>> GetOrdersAsync(int? userId = null);
     Task<ApiResponse<OrderResponse>> GetOrderByIdAsync(int orderId, int? userId = null);
-    Task<ApiResponse<OrderResponse>> UpdateOrderStatusAsync(int orderId, UpdateOrderStatusRequest request);
-    Task<ApiResponse<OrderResponse>> CancelOrderAsync(int orderId, int? userId, string reason);
+    Task<ApiResponse<OrderResponse>> UpdateOrderStatusAsync(int orderId, UpdateOrderStatusRequest request, int? actorUserId = null, string? actorRole = null, string? actorName = null);
+    Task<ApiResponse<OrderResponse>> CancelOrderAsync(int orderId, int? userId, string reason, string? actorRole = null, string? actorName = null);
     Task<ApiResponse<ValidatePromoResponse>> ValidatePromotionAsync(ValidatePromoRequest request);
+    Task<int> ExpireOverdueOnlinePaymentsAsync(CancellationToken ct = default);
 }
 
 public class OrderService : IOrderService
@@ -189,9 +190,15 @@ public class OrderService : IOrderService
             var orderCode = "MV" + DateTime.UtcNow.ToString("yyyyMMdd") + Guid.NewGuid().ToString("N")[..6].ToUpper();
             var nowUtc = DateTime.UtcNow;
             var paymentMethodNormalized = string.IsNullOrWhiteSpace(request.PaymentMethod) ? "COD" : request.PaymentMethod.Trim().ToUpper();
-            DateTime? paymentExpiresAt = paymentMethodNormalized == "SEPAY"
-                ? nowUtc.AddMinutes(15)
-                : (paymentMethodNormalized != "COD" ? nowUtc.AddSeconds(120) : null);
+            bool isCod = OrderWorkflow.IsCod(paymentMethodNormalized);
+
+            // COD never has an online payment expiry timer and starts with PendingConfirmation + Unpaid.
+            DateTime? paymentExpiresAt = isCod
+                ? null
+                : (paymentMethodNormalized == "SEPAY" ? nowUtc.AddMinutes(15) : nowUtc.AddSeconds(120));
+
+            var initialStatus = isCod ? OrderWorkflow.StatusPendingConfirmation : OrderWorkflow.StatusPending;
+            var initialPaymentStatus = isCod ? OrderWorkflow.PaymentUnpaid : OrderWorkflow.PaymentPending;
 
             var order = new Order
             {
@@ -201,8 +208,8 @@ public class OrderService : IOrderService
                 DiscountAmount = discount,
                 ShippingFee = shippingFee,
                 TotalAmount = totalAmount,
-                Status = "Pending",
-                PaymentStatus = "Pending",
+                Status = initialStatus,
+                PaymentStatus = initialPaymentStatus,
                 PaymentMethod = paymentMethodNormalized,
                 PaymentExpiresAt = paymentExpiresAt,
                 CustomerName = request.CustomerName.Trim(),
@@ -210,6 +217,7 @@ public class OrderService : IOrderService
                 ShippingAddress = request.ShippingAddress.Trim(),
                 Note = request.Note ?? string.Empty,
                 CreatedAt = nowUtc,
+                UpdatedAt = nowUtc,
                 OrderDetails = orderDetailsToCreate
             };
 
@@ -220,10 +228,13 @@ public class OrderService : IOrderService
             _context.OrderStatusHistories.Add(new OrderStatusHistory
             {
                 OrderId = order.Id,
-                Status = "Pending",
-                Note = paymentExpiresAt.HasValue
-                    ? $"Đơn hàng mới được tạo thành công ({paymentMethodNormalized}). Thời hạn thanh toán 02:00 (hết hạn lúc {paymentExpiresAt.Value:HH:mm:ss} UTC)."
-                    : "Đơn hàng mới được tạo thành công.",
+                Status = initialStatus,
+                Note = isCod
+                    ? "Đặt hàng COD thành công. Chờ cửa hàng xác nhận (thanh toán tiền mặt khi nhận hàng)."
+                    : $"Đơn hàng mới được tạo thành công ({paymentMethodNormalized}). Thời hạn thanh toán {(paymentMethodNormalized == "SEPAY" ? "15:00" : "02:00")} (hết hạn lúc {paymentExpiresAt!.Value:HH:mm:ss} UTC).",
+                ChangedByUserId = userId,
+                ChangedByName = request.CustomerName.Trim(),
+                ChangedByRole = userId.HasValue ? "Customer" : "Guest",
                 CreatedAt = nowUtc
             });
 
@@ -276,8 +287,52 @@ public class OrderService : IOrderService
         }
     }
 
+    public async Task<int> ExpireOverdueOnlinePaymentsAsync(CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var overdueOnlineOrders = await _context.Orders
+            .Include(o => o.PaymentTransactions)
+            .Where(o => o.PaymentMethod != "COD"
+                     && o.PaymentStatus == OrderWorkflow.PaymentPending
+                     && o.PaymentExpiresAt != null
+                     && o.PaymentExpiresAt <= now
+                     && o.Status != OrderWorkflow.StatusCancelled
+                     && o.Status != OrderWorkflow.StatusDelivered
+                     && o.Status != OrderWorkflow.StatusCompleted
+                     && o.Status != OrderWorkflow.StatusRejected)
+            .ToListAsync(ct);
+
+        if (overdueOnlineOrders.Count == 0) return 0;
+
+        foreach (var order in overdueOnlineOrders)
+        {
+            order.PaymentStatus = OrderWorkflow.PaymentExpired;
+            order.UpdatedAt = now;
+
+            foreach (var pt in order.PaymentTransactions.Where(t => t.PaymentStatus == OrderWorkflow.PaymentPending && t.PaymentExpiresAt <= now))
+            {
+                pt.PaymentStatus = OrderWorkflow.PaymentExpired;
+            }
+
+            _context.OrderStatusHistories.Add(new OrderStatusHistory
+            {
+                OrderId = order.Id,
+                Status = order.Status,
+                Note = $"Phiên thanh toán online ({order.PaymentMethod}) đã hết hạn thanh toán.",
+                ChangedByRole = "System",
+                ChangedByName = "OnlinePaymentExpiration",
+                CreatedAt = now
+            });
+        }
+
+        await _context.SaveChangesAsync(ct);
+        return overdueOnlineOrders.Count;
+    }
+
     public async Task<ApiResponse<List<OrderResponse>>> GetOrdersAsync(int? userId = null)
     {
+        await ExpireOverdueOnlinePaymentsAsync();
+
         var query = _context.Orders
             .Include(o => o.OrderDetails)
                 .ThenInclude(od => od.Options)
@@ -296,7 +351,7 @@ public class OrderService : IOrderService
 
         var orders = await query
             .OrderByDescending(o => o.CreatedAt)
-            .Select(o => MapToOrderResponse(o))
+            .Select(o => MapOrderToResponse(o))
             .ToListAsync();
 
         return ApiResponse<List<OrderResponse>>.Ok(orders);
@@ -326,118 +381,232 @@ public class OrderService : IOrderService
             return ApiResponse<OrderResponse>.Fail("Không tìm thấy đơn hàng.");
         }
 
-        // Auto-expire online payment session if 120 seconds have elapsed while still Pending
+        // Auto-expire ONLY online payment sessions if PaymentExpiresAt elapsed while still Pending.
+        // COD orders are explicitly excluded from automatic payment expiration or cancellation.
         var now = DateTime.UtcNow;
         bool changed = false;
-        if (order.PaymentMethod != "COD" && order.PaymentStatus == "Pending" && order.PaymentExpiresAt.HasValue && now >= order.PaymentExpiresAt.Value)
+        if (OrderWorkflow.IsOnlinePayment(order.PaymentMethod)
+            && order.PaymentStatus == OrderWorkflow.PaymentPending
+            && order.PaymentExpiresAt.HasValue
+            && now >= order.PaymentExpiresAt.Value)
         {
-            order.PaymentStatus = "Expired";
+            order.PaymentStatus = OrderWorkflow.PaymentExpired;
             order.UpdatedAt = now;
             changed = true;
         }
-        foreach (var pt in order.PaymentTransactions.Where(t => t.PaymentStatus == "Pending" && now >= t.PaymentExpiresAt))
+        if (OrderWorkflow.IsOnlinePayment(order.PaymentMethod))
         {
-            pt.PaymentStatus = "Expired";
-            changed = true;
+            foreach (var pt in order.PaymentTransactions.Where(t => t.PaymentStatus == OrderWorkflow.PaymentPending && now >= t.PaymentExpiresAt))
+            {
+                pt.PaymentStatus = OrderWorkflow.PaymentExpired;
+                changed = true;
+            }
         }
         if (changed)
         {
             await _context.SaveChangesAsync();
         }
 
-        return ApiResponse<OrderResponse>.Ok(MapToOrderResponse(order));
+        return ApiResponse<OrderResponse>.Ok(MapOrderToResponse(order));
     }
 
-    public async Task<ApiResponse<OrderResponse>> UpdateOrderStatusAsync(int orderId, UpdateOrderStatusRequest request)
+    public async Task<ApiResponse<OrderResponse>> UpdateOrderStatusAsync(
+        int orderId,
+        UpdateOrderStatusRequest request,
+        int? actorUserId = null,
+        string? actorRole = null,
+        string? actorName = null)
     {
-        var order = await _context.Orders
-            .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Options)
-            .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Product)
-            .Include(o => o.DeliveryAssignment)
-                .ThenInclude(da => da!.Shipper)
-            .Include(o => o.StatusHistories)
-            .FirstOrDefaultAsync(o => o.Id == orderId);
-
-        if (order == null)
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            return ApiResponse<OrderResponse>.Fail("Không tìm thấy đơn hàng.");
+            var order = await _context.Orders
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Options)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Product)
+                .Include(o => o.DeliveryAssignment)
+                    .ThenInclude(da => da!.Shipper)
+                .Include(o => o.StatusHistories)
+                .Include(o => o.PaymentTransactions)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
+            if (order == null)
+            {
+                return ApiResponse<OrderResponse>.Fail("Không tìm thấy đơn hàng.");
+            }
+
+            if (string.Equals(actorRole, "DeliveryStaff", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!actorUserId.HasValue || order.DeliveryAssignment == null || order.DeliveryAssignment.ShipperId != actorUserId.Value)
+                {
+                    return ApiResponse<OrderResponse>.Fail("FORBIDDEN: Shipper chỉ được cập nhật đơn hàng đã được phân công cho mình qua quy trình giao hàng.");
+                }
+            }
+
+            var targetStatus = !string.IsNullOrWhiteSpace(request.Status) ? request.Status.Trim() : order.Status;
+            if (!OrderWorkflow.CanTransition(order.Status, targetStatus))
+            {
+                return ApiResponse<OrderResponse>.Fail($"Không thể chuyển trạng thái đơn hàng từ '{order.Status}' sang '{targetStatus}'.");
+            }
+
+            var now = DateTime.UtcNow;
+            bool isCod = OrderWorkflow.IsCod(order.PaymentMethod);
+            var targetPaymentStatus = !string.IsNullOrWhiteSpace(request.PaymentStatus) ? request.PaymentStatus.Trim() : null;
+
+            if (targetPaymentStatus != null)
+            {
+                if (isCod)
+                {
+                    if (string.Equals(targetPaymentStatus, OrderWorkflow.PaymentExpired, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return ApiResponse<OrderResponse>.Fail("Đơn hàng COD không áp dụng trạng thái hết hạn thanh toán online.");
+                    }
+
+                    if (OrderWorkflow.IsPaid(targetPaymentStatus))
+                    {
+                        if (OrderWorkflow.IsPaid(order.PaymentStatus))
+                        {
+                            return ApiResponse<OrderResponse>.Fail("Đơn hàng COD này đã được xác nhận thanh toán trước đó, không thể xác nhận hai lần.");
+                        }
+
+                        bool isDeliveringCompletion = string.Equals(targetStatus, OrderWorkflow.StatusDelivered, StringComparison.OrdinalIgnoreCase)
+                                                      || string.Equals(targetStatus, OrderWorkflow.StatusCompleted, StringComparison.OrdinalIgnoreCase);
+
+                        if (!isDeliveringCompletion)
+                        {
+                            return ApiResponse<OrderResponse>.Fail("Đơn hàng COD giữ nguyên trạng thái Unpaid khi xử lý ở quầy/bếp và chỉ chuyển sang Paid khi đã giao hàng thành công.");
+                        }
+
+                        if (order.DeliveryAssignment != null && !order.DeliveryAssignment.IsCodCollected && string.Equals(actorRole, "DeliveryStaff", StringComparison.OrdinalIgnoreCase) == false)
+                        {
+                            // Ensure shipper/delivery collection is tracked even if completed by admin after delivery
+                            order.DeliveryAssignment.IsCodCollected = true;
+                            order.DeliveryAssignment.CodCollectedAt ??= now;
+                            order.DeliveryAssignment.CollectedByUserId ??= actorUserId;
+                        }
+                    }
+                }
+                else if (OrderWorkflow.IsPaid(targetPaymentStatus) && OrderWorkflow.IsPaid(order.PaymentStatus))
+                {
+                    return ApiResponse<OrderResponse>.Fail("Đơn hàng đã được xác nhận thanh toán trước đó, không thể xác nhận hai lần.");
+                }
+
+                order.PaymentStatus = targetPaymentStatus;
+                if (OrderWorkflow.IsPaid(targetPaymentStatus))
+                {
+                    order.PaidAt ??= now;
+                    order.PaymentConfirmedByUserId ??= actorUserId;
+                    order.PaymentConfirmedByName ??= actorName ?? actorRole ?? "Staff";
+                }
+            }
+
+            order.Status = targetStatus;
+            order.UpdatedAt = now;
+
+            _context.OrderStatusHistories.Add(new OrderStatusHistory
+            {
+                OrderId = order.Id,
+                Status = order.Status,
+                Note = string.IsNullOrWhiteSpace(request.Note)
+                    ? $"Trạng thái đơn hàng cập nhật thành: {order.Status}"
+                    : request.Note.Trim(),
+                ChangedByUserId = actorUserId,
+                ChangedByName = actorName,
+                ChangedByRole = actorRole,
+                CreatedAt = now
+            });
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return ApiResponse<OrderResponse>.Ok(MapOrderToResponse(order), "Cập nhật trạng thái đơn thành công!");
         }
-
-        if (!string.IsNullOrWhiteSpace(request.Status))
+        catch (Exception ex)
         {
-            order.Status = request.Status;
+            await transaction.RollbackAsync();
+            return ApiResponse<OrderResponse>.Fail($"Lỗi cập nhật trạng thái đơn hàng: {ex.Message}");
         }
-
-        if (!string.IsNullOrWhiteSpace(request.PaymentStatus))
-        {
-            order.PaymentStatus = request.PaymentStatus;
-        }
-
-        order.UpdatedAt = DateTime.UtcNow;
-
-        _context.OrderStatusHistories.Add(new OrderStatusHistory
-        {
-            OrderId = order.Id,
-            Status = order.Status,
-            Note = string.IsNullOrWhiteSpace(request.Note) ? $"Trạng thái đơn hàng cập nhật thành: {order.Status}" : request.Note,
-            CreatedAt = DateTime.UtcNow
-        });
-
-        await _context.SaveChangesAsync();
-
-        return ApiResponse<OrderResponse>.Ok(MapToOrderResponse(order), "Cập nhật trạng thái đơn thành công!");
     }
 
-    public async Task<ApiResponse<OrderResponse>> CancelOrderAsync(int orderId, int? userId, string reason)
+    public async Task<ApiResponse<OrderResponse>> CancelOrderAsync(
+        int orderId,
+        int? userId,
+        string reason,
+        string? actorRole = null,
+        string? actorName = null)
     {
-        var order = await _context.Orders
-            .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Options)
-            .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Product)
-            .Include(o => o.DeliveryAssignment)
-                .ThenInclude(da => da!.Shipper)
-            .Include(o => o.StatusHistories)
-            .FirstOrDefaultAsync(o => o.Id == orderId);
-
-        if (order == null)
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            return ApiResponse<OrderResponse>.Fail("Không tìm thấy đơn hàng.");
+            var order = await _context.Orders
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Options)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Product)
+                .Include(o => o.DeliveryAssignment)
+                    .ThenInclude(da => da!.Shipper)
+                .Include(o => o.StatusHistories)
+                .Include(o => o.PaymentTransactions)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
+            if (order == null)
+            {
+                return ApiResponse<OrderResponse>.Fail("Không tìm thấy đơn hàng.");
+            }
+
+            if (OrderWorkflow.IsTerminalStatus(order.Status))
+            {
+                return ApiResponse<OrderResponse>.Fail("Đơn hàng đã hoàn tất hoặc đã hủy trước đó, không thể hủy.");
+            }
+
+            bool isPrivileged = string.Equals(actorRole, "Admin", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(actorRole, "Manager", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(actorRole, "Staff", StringComparison.OrdinalIgnoreCase);
+
+            if (!isPrivileged)
+            {
+                if (order.UserId.HasValue && (!userId.HasValue || order.UserId.Value != userId.Value))
+                {
+                    return ApiResponse<OrderResponse>.Fail("FORBIDDEN: Bạn không có quyền hủy đơn hàng của người khác.");
+                }
+
+                if (!OrderWorkflow.IsCustomerCancellableStatus(order.Status))
+                {
+                    return ApiResponse<OrderResponse>.Fail("Đơn hàng đang được chuẩn bị hoặc đang giao hàng, không thể tự hủy. Vui lòng chat với Quản lý để được hỗ trợ.");
+                }
+            }
+
+            var now = DateTime.UtcNow;
+            var cancelNote = string.IsNullOrWhiteSpace(reason)
+                ? (isPrivileged ? "Nhân viên cửa hàng hủy đơn theo quy định" : "Khách hàng hủy đơn theo yêu cầu")
+                : reason.Trim();
+
+            order.Status = OrderWorkflow.StatusCancelled;
+            order.CancelReason = cancelNote;
+            order.UpdatedAt = now;
+
+            _context.OrderStatusHistories.Add(new OrderStatusHistory
+            {
+                OrderId = order.Id,
+                Status = OrderWorkflow.StatusCancelled,
+                Note = cancelNote,
+                ChangedByUserId = userId,
+                ChangedByName = actorName ?? (isPrivileged ? "Nhân viên" : order.CustomerName),
+                ChangedByRole = actorRole ?? "Customer",
+                CreatedAt = now
+            });
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return ApiResponse<OrderResponse>.Ok(MapOrderToResponse(order), "Đã hủy đơn hàng thành công!");
         }
-
-        if (order.Status == "Cancelled")
+        catch (Exception ex)
         {
-            return ApiResponse<OrderResponse>.Fail("Đơn hàng này đã được hủy trước đó.");
+            await transaction.RollbackAsync();
+            return ApiResponse<OrderResponse>.Fail($"Lỗi hủy đơn hàng: {ex.Message}");
         }
-
-        if (order.Status == "Completed" || order.Status == "Delivering")
-        {
-            return ApiResponse<OrderResponse>.Fail("Đơn hàng đang giao hoặc đã hoàn tất, không thể hủy.");
-        }
-
-        var elapsedMinutes = (DateTime.UtcNow - order.CreatedAt).TotalMinutes;
-        if (order.Status != "Pending" && elapsedMinutes > 2.5)
-        {
-            return ApiResponse<OrderResponse>.Fail("Đơn hàng đã được chế biến hoặc đã quá 2 phút cho phép tự hủy. Vui lòng chat với Quản lý để được hỗ trợ.");
-        }
-
-        var cancelNote = string.IsNullOrWhiteSpace(reason) ? "Khách hàng hủy đơn trong vòng 2 phút" : reason.Trim();
-        order.Status = "Cancelled";
-        order.CancelReason = cancelNote;
-        order.UpdatedAt = DateTime.UtcNow;
-
-        _context.OrderStatusHistories.Add(new OrderStatusHistory
-        {
-            OrderId = order.Id,
-            Status = "Cancelled",
-            Note = cancelNote,
-            CreatedAt = DateTime.UtcNow
-        });
-
-        await _context.SaveChangesAsync();
-        return ApiResponse<OrderResponse>.Ok(MapToOrderResponse(order), "Đã hủy đơn hàng thành công!");
     }
 
     public async Task<ApiResponse<ValidatePromoResponse>> ValidatePromotionAsync(ValidatePromoRequest request)
@@ -532,29 +701,31 @@ public class OrderService : IOrderService
         });
     }
 
-    private static OrderResponse MapToOrderResponse(Order o)
+    public static OrderResponse MapOrderToResponse(Order o)
     {
         var now = DateTime.UtcNow;
-        var elapsedMinutes = (now - o.CreatedAt).TotalMinutes;
-        var canCancel = o.Status == "Pending" && elapsedMinutes <= 2.5;
+        bool isCod = OrderWorkflow.IsCod(o.PaymentMethod);
+        var canCancel = OrderWorkflow.IsCustomerCancellableStatus(o.Status);
 
-        var activeExpiresAt = o.PaymentExpiresAt;
-        var latestTx = o.PaymentTransactions?.OrderByDescending(pt => pt.CreatedAt).FirstOrDefault();
+        DateTime? activeExpiresAt = isCod ? null : o.PaymentExpiresAt;
+        var latestTx = !isCod
+            ? o.PaymentTransactions?.OrderByDescending(pt => pt.CreatedAt).FirstOrDefault()
+            : null;
         if (latestTx != null)
         {
             activeExpiresAt = latestTx.PaymentExpiresAt;
         }
 
         int remainingPaymentSecs = 0;
-        if (o.PaymentMethod != "COD" && o.PaymentStatus == "Pending" && activeExpiresAt.HasValue)
+        if (!isCod && o.PaymentStatus == OrderWorkflow.PaymentPending && activeExpiresAt.HasValue)
         {
             remainingPaymentSecs = Math.Max(0, (int)Math.Ceiling((activeExpiresAt.Value - now).TotalSeconds));
         }
 
         var effectivePaymentStatus = o.PaymentStatus;
-        if (o.PaymentMethod != "COD" && effectivePaymentStatus == "Pending" && activeExpiresAt.HasValue && remainingPaymentSecs <= 0)
+        if (!isCod && effectivePaymentStatus == OrderWorkflow.PaymentPending && activeExpiresAt.HasValue && remainingPaymentSecs <= 0)
         {
-            effectivePaymentStatus = "Expired";
+            effectivePaymentStatus = OrderWorkflow.PaymentExpired;
         }
 
         return new OrderResponse
@@ -576,17 +747,20 @@ public class OrderService : IOrderService
             CancelReason = o.CancelReason,
             CanCancel = canCancel,
             CreatedAt = DateTime.SpecifyKind(o.CreatedAt, DateTimeKind.Utc),
+            UpdatedAt = o.UpdatedAt.HasValue ? DateTime.SpecifyKind(o.UpdatedAt.Value, DateTimeKind.Utc) : null,
             PaymentExpiresAt = activeExpiresAt.HasValue ? DateTime.SpecifyKind(activeExpiresAt.Value, DateTimeKind.Utc) : null,
             PaidAt = o.PaidAt.HasValue ? DateTime.SpecifyKind(o.PaidAt.Value, DateTimeKind.Utc) : null,
+            PaymentConfirmedByUserId = o.PaymentConfirmedByUserId,
+            PaymentConfirmedByName = o.PaymentConfirmedByName ?? string.Empty,
             RemainingPaymentSeconds = remainingPaymentSecs,
             ServerTimeUtc = now,
             PaymentTransactions = o.PaymentTransactions != null
                 ? o.PaymentTransactions.OrderByDescending(pt => pt.CreatedAt).Select(pt =>
                 {
-                    int rem = pt.PaymentStatus == "Pending"
+                    int rem = !isCod && pt.PaymentStatus == OrderWorkflow.PaymentPending
                         ? Math.Max(0, (int)Math.Ceiling((pt.PaymentExpiresAt - now).TotalSeconds))
                         : 0;
-                    bool exp = pt.PaymentStatus == "Expired" || (pt.PaymentStatus == "Pending" && rem <= 0);
+                    bool exp = !isCod && (pt.PaymentStatus == OrderWorkflow.PaymentExpired || (pt.PaymentStatus == OrderWorkflow.PaymentPending && rem <= 0));
                     return new PaymentTransactionDto
                     {
                         Id = pt.Id,
@@ -597,7 +771,7 @@ public class OrderService : IOrderService
                         TransactionId = pt.TransactionId,
                         PaymentMethod = pt.PaymentMethod,
                         Amount = pt.Amount,
-                        PaymentStatus = exp && pt.PaymentStatus == "Pending" ? "Expired" : pt.PaymentStatus,
+                        PaymentStatus = exp && pt.PaymentStatus == OrderWorkflow.PaymentPending ? OrderWorkflow.PaymentExpired : pt.PaymentStatus,
                         PayUrl = pt.PayUrl,
                         QrCodeUrl = pt.QrCodeUrl,
                         Deeplink = pt.Deeplink,
@@ -614,15 +788,23 @@ public class OrderService : IOrderService
             ShipperName = o.DeliveryAssignment != null && o.DeliveryAssignment.Shipper != null ? o.DeliveryAssignment.Shipper.FullName : string.Empty,
             ShipperPhone = o.DeliveryAssignment != null && o.DeliveryAssignment.Shipper != null ? o.DeliveryAssignment.Shipper.PhoneNumber : string.Empty,
             DeliveryStatus = o.DeliveryAssignment != null ? o.DeliveryAssignment.Status : string.Empty,
-            CodAmount = o.DeliveryAssignment != null ? o.DeliveryAssignment.CodAmount : (o.PaymentMethod == "COD" ? o.TotalAmount : 0),
+            DeliveryFailureReason = o.DeliveryAssignment != null ? o.DeliveryAssignment.FailureReason : string.Empty,
+            AssignedAt = o.DeliveryAssignment != null ? DateTime.SpecifyKind(o.DeliveryAssignment.AssignedAt, DateTimeKind.Utc) : null,
+            PickedUpAt = o.DeliveryAssignment != null && o.DeliveryAssignment.PickedUpAt.HasValue ? DateTime.SpecifyKind(o.DeliveryAssignment.PickedUpAt.Value, DateTimeKind.Utc) : null,
+            DeliveredAt = o.DeliveryAssignment != null && o.DeliveryAssignment.DeliveredAt.HasValue ? DateTime.SpecifyKind(o.DeliveryAssignment.DeliveredAt.Value, DateTimeKind.Utc) : null,
+            CodAmount = o.DeliveryAssignment != null ? o.DeliveryAssignment.CodAmount : (isCod ? o.TotalAmount : 0),
             IsCodCollected = o.DeliveryAssignment != null && o.DeliveryAssignment.IsCodCollected,
+            CodCollectedAt = o.DeliveryAssignment != null && o.DeliveryAssignment.CodCollectedAt.HasValue ? DateTime.SpecifyKind(o.DeliveryAssignment.CodCollectedAt.Value, DateTimeKind.Utc) : null,
             CodReconciled = o.DeliveryAssignment != null && o.DeliveryAssignment.CodReconciled,
             StatusHistories = o.StatusHistories != null ? o.StatusHistories.OrderBy(h => h.CreatedAt).Select(h => new OrderStatusHistoryDto
             {
                 Id = h.Id,
                 Status = h.Status,
                 Note = h.Note,
-                CreatedAt = h.CreatedAt
+                ChangedByUserId = h.ChangedByUserId,
+                ChangedByName = h.ChangedByName,
+                ChangedByRole = h.ChangedByRole,
+                CreatedAt = DateTime.SpecifyKind(h.CreatedAt, DateTimeKind.Utc)
             }).ToList() : new List<OrderStatusHistoryDto>(),
             Items = o.OrderDetails.Select(od => new OrderDetailResponse
             {

@@ -8,6 +8,7 @@ import { OrderResponse } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { getDistinctOrderItemImage } from "@/lib/orderImageHelper";
+import { getOrderStatusMeta, getPaymentStatusMeta, isCodPayment } from "@/lib/orderStatus";
 import {
   Package,
   ArrowRight,
@@ -187,9 +188,11 @@ export default function OrdersListPage() {
   // Filter orders by tab
   const filteredOrders = orders.filter((o) => {
     if (activeTab === "ALL") return true;
-    if (activeTab === "PROCESSING") return o.status === "Pending" || o.status === "Confirmed" || o.status === "Preparing" || o.status === "Delivering";
-    if (activeTab === "COMPLETED") return o.status === "Completed";
-    if (activeTab === "CANCELLED") return o.status === "Cancelled";
+    if (activeTab === "PROCESSING") {
+      return ["Pending", "PendingConfirmation", "Confirmed", "Preparing", "ReadyForPickup", "Delivering", "DeliveryFailed"].includes(o.status);
+    }
+    if (activeTab === "COMPLETED") return o.status === "Completed" || o.status === "Delivered";
+    if (activeTab === "CANCELLED") return o.status === "Cancelled" || o.status === "Rejected";
     return true;
   });
 
@@ -313,7 +316,7 @@ export default function OrdersListPage() {
           }`}
         >
           Đang xử lý & Giao hàng (
-          {orders.filter((o) => ["Pending", "Confirmed", "Preparing", "Delivering"].includes(o.status)).length}
+          {orders.filter((o) => ["Pending", "PendingConfirmation", "Confirmed", "Preparing", "ReadyForPickup", "Delivering", "DeliveryFailed"].includes(o.status)).length}
           )
         </button>
 
@@ -328,7 +331,7 @@ export default function OrdersListPage() {
               : "bg-white border border-[#EFE6DC] text-[#2D2522] hover:bg-[#FAF7F2]"
           }`}
         >
-          Đã hoàn thành ({orders.filter((o) => o.status === "Completed").length})
+          Đã hoàn thành ({orders.filter((o) => o.status === "Completed" || o.status === "Delivered").length})
         </button>
 
         <button
@@ -342,7 +345,7 @@ export default function OrdersListPage() {
               : "bg-white border border-[#EFE6DC] text-red-600 hover:bg-red-50"
           }`}
         >
-          Lịch sử đơn đã hủy ({orders.filter((o) => o.status === "Cancelled").length})
+          Lịch sử đơn đã hủy ({orders.filter((o) => o.status === "Cancelled" || o.status === "Rejected").length})
         </button>
       </div>
 
@@ -377,17 +380,23 @@ export default function OrdersListPage() {
       ) : (
         <div className="space-y-4">
           {paginatedOrders.map((o) => {
-            // Calculate remaining seconds for 2-minute cancellation window
-            const createdMs = new Date(o.createdAt).getTime();
-            const elapsedSeconds = Math.floor((currentTime - createdMs) / 1000);
-            const remainingSeconds = Math.max(0, 120 - elapsedSeconds);
-            const canCancelNow = o.status === "Pending" && remainingSeconds > 0;
+            const isCod = isCodPayment(o.paymentMethod);
+            const statusMeta = getOrderStatusMeta(o.status);
+            const paymentMeta = getPaymentStatusMeta(o.paymentStatus, o.paymentMethod);
+            const canCancelNow =
+              o.canCancel ??
+              ["Pending", "PendingConfirmation", "Confirmed"].includes(o.status);
 
             const formatCountdown = (secs: number) => {
               const m = Math.floor(secs / 60);
               const s = secs % 60;
               return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
             };
+
+            const onlineRemaining =
+              !isCod && o.paymentStatus === "Pending" && o.paymentExpiresAt
+                ? Math.max(0, Math.floor((new Date(o.paymentExpiresAt).getTime() - currentTime) / 1000))
+                : 0;
 
             return (
               <div
@@ -401,48 +410,33 @@ export default function OrdersListPage() {
                         #{o.orderCode}
                       </span>
                       <span
-                        className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                          o.status === "Completed"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : o.status === "Cancelled"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
+                        className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${statusMeta.badgeClass}`}
                       >
-                        {o.status === "Pending"
-                          ? "Chờ xác nhận"
-                          : o.status === "Confirmed"
-                          ? "Đã xác nhận"
-                          : o.status === "Preparing"
-                          ? "Đang pha chế"
-                          : o.status === "Delivering"
-                          ? "Đang giao hàng"
-                          : o.status === "Completed"
-                          ? "Giao thành công"
-                          : "Đã hủy đơn"}
+                        {statusMeta.label}
                       </span>
 
-                      {/* 2-minute countdown timer badge */}
-                      {canCancelNow && (
-                        <span className="flex items-center gap-1 text-[11px] font-black text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full animate-pulse">
+                      {/* Online payment expiry timer shown strictly for online methods (never COD!) */}
+                      {!isCod && o.paymentStatus === "Pending" && onlineRemaining > 0 && (
+                        <span className="flex items-center gap-1 text-[11px] font-black text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
                           <Clock className="w-3 h-3" />
-                          <span>Tự hủy trong: {formatCountdown(remainingSeconds)}</span>
+                          <span>Thanh toán online còn: {formatCountdown(onlineRemaining)}</span>
                         </span>
                       )}
                     </div>
 
                     <p className="text-xs text-[#786C65]">
                       {new Date(o.createdAt).toLocaleString("vi-VN")} • {o.items?.length || 0} món
+                      {o.shipperName ? ` • Shipper: ${o.shipperName}` : ""}
                     </p>
                     <p className="text-xs text-[#786C65]">
                       Địa chỉ: <span className="font-semibold text-[#2D2522]">{o.shippingAddress}</span>
                     </p>
 
-                    {/* Display Cancellation Reason if Cancelled */}
-                    {o.status === "Cancelled" && (
+                    {/* Display Cancellation / Failure Reason if Cancelled/Failed */}
+                    {(o.status === "Cancelled" || o.status === "DeliveryFailed" || o.status === "Rejected") && (
                       <div className="mt-2 p-2.5 rounded-xl bg-red-50 border border-red-100 text-xs text-red-700">
-                        <span className="font-bold">Lý do hủy:</span>{" "}
-                        {o.cancelReason || o.note || "Đơn hàng đã bị hủy theo quy định."}
+                        <span className="font-bold">Lý do:</span>{" "}
+                        {o.deliveryFailureReason || o.cancelReason || o.note || "Đơn hàng có sự cố hoặc đã hủy theo yêu cầu."}
                       </div>
                     )}
                   </div>
@@ -453,8 +447,8 @@ export default function OrdersListPage() {
                     </span>
                     <span className="text-[11px] text-[#786C65]">
                       {o.paymentMethod} •{" "}
-                      <span className={o.paymentStatus === "Paid" ? "text-emerald-600 font-bold" : "text-amber-700 font-bold"}>
-                        {o.paymentStatus === "Paid" ? "Đã thanh toán" : "Chưa thanh toán"}
+                      <span className={paymentMeta.isPaid ? "text-emerald-600 font-bold" : "text-amber-700 font-bold"}>
+                        {paymentMeta.label}
                       </span>
                     </span>
                   </div>
