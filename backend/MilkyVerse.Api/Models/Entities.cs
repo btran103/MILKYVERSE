@@ -117,6 +117,9 @@ public class Product
     [MaxLength(500)]
     public string ImageUrl { get; set; } = string.Empty;
 
+    [MaxLength(200)]
+    public string? ImagePlaceholder { get; set; }
+
     public bool IsBestSeller { get; set; } = false;
     public bool IsNew { get; set; } = false;
     public bool IsActive { get; set; } = true;

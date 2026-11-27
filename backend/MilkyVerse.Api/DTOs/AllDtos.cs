@@ -127,6 +127,7 @@ public class CategoryDto
     public string Slug { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
+    public string? ImagePlaceholder { get; set; }
     public string CategoryType { get; set; } = "DRINK"; // DRINK, FOOD, COMBO
     public int ProductCount { get; set; }
 }
@@ -141,6 +142,7 @@ public class ProductDto
     public string Description { get; set; } = string.Empty;
     public decimal BasePrice { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
+    public string? ImagePlaceholder { get; set; }
     public bool IsBestSeller { get; set; }
     public bool IsNew { get; set; }
     public bool IsActive { get; set; }
@@ -227,6 +229,7 @@ public class CreateProductRequest
     public string Description { get; set; } = string.Empty;
     public decimal BasePrice { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
+    public string? ImagePlaceholder { get; set; }
     public bool IsBestSeller { get; set; }
     public bool IsNew { get; set; }
     public int StockStatus { get; set; } = 1;
@@ -351,6 +354,7 @@ public class OrderDetailResponse
     public bool IsCustomDIY { get; set; }
     public string CustomNotes { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
+    public string? ImagePlaceholder { get; set; }
     public List<OrderItemOptionResponse> Toppings { get; set; } = new();
 }
 
