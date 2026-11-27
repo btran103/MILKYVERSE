@@ -2,22 +2,22 @@
 // Ensures no two items in the same order or list display duplicate images
 
 const DRINK_IMAGES = [
-  "/images/menu/tra-sua-tran-chau-den.jpg", // Trà sữa truyền thống trân châu
-  "/images/menu/tra-dao-cam-sa.jpg", // Trà đào cam sả
-  "/images/menu/tra-o-long-kem-cheese.jpg", // Trà ô long nướng kem cheese
-  "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?w=600&auto=format&fit=crop&q=80", // Matcha Latte
-  "/images/menu/tra-o-long-kem-cheese.jpg", // Trà kem cheese Macchiato
-  "https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=600&auto=format&fit=crop&q=80", // Trà sữa hạt sen dừa
-  "https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=600&auto=format&fit=crop&q=80", // Trà khoai môn béo ngậy
-  "https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=600&auto=format&fit=crop&q=80", // Trà dâu tây hoa hồng
-  "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80", // Cà phê muối béo ngậy
-  "https://images.unsplash.com/photo-1542990253-0d0f5be5f0ed?w=600&auto=format&fit=crop&q=80", // Cacao đá xay
-  "/images/menu/sua-tuoi-tran-chau-duong-den.jpg", // Sữa tươi trân châu đường đen
-  "https://images.unsplash.com/photo-1553530666-ba11a7da3888?w=600&auto=format&fit=crop&q=80", // Sinh tố nhiệt đới
-  "https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=600&auto=format&fit=crop&q=80", // Nước ép hoa quả tươi
-  "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=600&auto=format&fit=crop&q=80", // Trà hoa cúc mật ong
-  "https://images.unsplash.com/photo-1541167760496-1628856ab772?w=600&auto=format&fit=crop&q=80", // Cà phê sữa đá Sài Gòn
-  "https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&auto=format&fit=crop&q=80", // Sữa chua nếp cẩm
+  "/images/products/tra-sua-tran-chau-den.png", // Trà sữa truyền thống trân châu
+  "/images/products/tra-dao-cam-sa.png", // Trà đào cam sả
+  "/images/products/tra-o-long-kem-cheese.png", // Trà ô long nướng kem cheese
+  "/images/products/tra-sua-matcha.png", // Matcha Latte / Trà sữa Matcha
+  "/images/products/tra-sua-kem-cheese.png", // Trà kem cheese Macchiato
+  "/images/products/tra-sua-truyen-thong.png", // Trà sữa truyền thống
+  "/images/products/tra-sua-khoai-mon.png", // Trà khoai môn béo ngậy
+  "/images/products/tra-sua-dau.png", // Trà dâu tây hoa hồng
+  "/images/products/ca-phe-muoi.png", // Cà phê muối béo ngậy
+  "/images/products/cacao-da-xay.png", // Cacao đá xay
+  "/images/products/sua-tuoi-tran-chau-duong-den.png", // Sữa tươi trân châu đường đen
+  "/images/products/nuoc-ep-xoai.png", // Sinh tố nhiệt đới
+  "/images/products/nuoc-ep-cam.png", // Nước ép hoa quả tươi
+  "/images/products/tra-sua-thai-xanh.png", // Trà xanh Thái
+  "/images/products/ca-phe-sua.png", // Cà phê sữa
+  "/images/products/tra-sua-duong-den.png", // Sữa tươi đường đen
 ];
 
 const FOOD_IMAGES = [
